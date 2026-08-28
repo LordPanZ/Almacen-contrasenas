@@ -1,0 +1,15 @@
+{
+  "name": "@cerbero/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Interfaz de línea de comandos de Cerbero",
+  "bin": { "cerbero": "./dist/main.js" },
+  "scripts": { "build": "tsc --build" },
+  "dependencies": {
+    "@cerbero/crypto": "workspace:*",
+    "@cerbero/guardians": "workspace:*",
+    "@cerbero/ledger": "workspace:*",
+    "@cerbero/sentinel": "workspace:*",
+    "@cerbero/vault": "workspace:*"
+  }
+}

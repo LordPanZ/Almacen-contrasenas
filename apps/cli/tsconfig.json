@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "dist" },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/crypto" },
+    { "path": "../../packages/vault" },
+    { "path": "../../packages/ledger" },
+    { "path": "../../packages/guardians" },
+    { "path": "../../packages/sentinel" }
+  ]
+}

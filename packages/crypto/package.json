@@ -1,0 +1,12 @@
+{
+  "name": "@cerbero/crypto",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Primitivas criptográficas auditables: Argon2id, XChaCha20-Poly1305, KEM híbrido post-cuántico, Shamir",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": { "build": "tsc --build" },
+  "dependencies": { "@noble/ciphers": "^2.4.0", "@noble/curves": "^2.0.1", "@noble/hashes": "^2.4.0", "@noble/post-quantum": "^0.7.1" }
+}

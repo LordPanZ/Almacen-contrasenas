@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/crypto" },
+    { "path": "packages/vault" },
+    { "path": "packages/ledger" },
+    { "path": "packages/guardians" },
+    { "path": "packages/sentinel" },
+    { "path": "apps/cli" }
+  ]
+}
