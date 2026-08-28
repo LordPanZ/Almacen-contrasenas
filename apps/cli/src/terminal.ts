@@ -65,8 +65,70 @@ export function tabla(cabeceras: readonly string[], filas: readonly (readonly st
   }
 }
 
+/**
+ * Lector de líneas para entrada NO interactiva (tuberías, ficheros, tests).
+ *
+ * Hace falta bufferear de verdad: una tubería entrega todo lo que tenga en un
+ * solo trozo, así que tratar cada trozo como una línea junta varias respuestas
+ * en una y deja la siguiente lectura esperando para siempre. Con un terminal
+ * real no pasa —cada Enter es un trozo— y por eso el fallo solo aparece al
+ * automatizar, que es justo cuando nadie lo está mirando.
+ */
+const lectorTuberia = {
+  pendiente: "",
+  lineas: [] as string[],
+  esperando: [] as ((linea: string) => void)[],
+  terminada: false,
+  iniciado: false,
+
+  entregar(linea: string): void {
+    const resolver = this.esperando.shift();
+    if (resolver) resolver(linea);
+    else this.lineas.push(linea);
+  },
+
+  iniciar(): void {
+    if (this.iniciado) return;
+    this.iniciado = true;
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (trozo: string) => {
+      this.pendiente += trozo;
+      for (;;) {
+        const corte = this.pendiente.indexOf("\n");
+        if (corte < 0) break;
+        this.entregar(this.pendiente.slice(0, corte).replace(/\r$/, ""));
+        this.pendiente = this.pendiente.slice(corte + 1);
+      }
+    });
+    process.stdin.on("end", () => {
+      this.terminada = true;
+      if (this.pendiente.length > 0) {
+        this.entregar(this.pendiente);
+        this.pendiente = "";
+      }
+      // Al cerrarse la entrada, todo el que espere recibe cadena vacía en vez
+      // de quedarse colgado: un script incompleto debe fallar, no congelarse.
+      while (this.esperando.length > 0) (this.esperando.shift() as (l: string) => void)("");
+    });
+    process.stdin.resume();
+  },
+
+  async leer(): Promise<string> {
+    this.iniciar();
+    const ya = this.lineas.shift();
+    if (ya !== undefined) return ya;
+    if (this.terminada) return "";
+    return await new Promise<string>((resolve) => this.esperando.push(resolve));
+  },
+};
+
 async function leerLinea(mensaje: string): Promise<string> {
   process.stdout.write(mensaje);
+  if (!process.stdin.isTTY) return await lectorTuberia.leer();
+
+  // Con terminal, cada pulsación de Enter llega como su propio trozo, así que
+  // un manejador por lectura basta y evita competir con el modo crudo que usa
+  // la entrada de contraseñas.
   return await new Promise((resolve) => {
     const alRecibir = (datos: Buffer) => {
       process.stdin.pause();

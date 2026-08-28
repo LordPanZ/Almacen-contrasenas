@@ -251,7 +251,39 @@ describe("bóveda de coacción y negación plausible", () => {
     ).toThrow(/ya abre una bóveda/);
   });
 
-  it("no deja escribir sobre la ranura que ocupa la contraseña actual", () => {
+  it("declarar las bóvedas anteriores evita pisarlas al llenar el fichero", () => {
+    // Cerbero no puede detectar por su cuenta qué ranuras están ocupadas: esa
+    // imposibilidad es lo que hace negable el fichero. Con las contraseñas que
+    // le aportas sí puede, y debe respetarlas todas.
+    const { conUna } = ficheroConDosBovedas();
+    const claves = [REAL];
+    let fichero = conUna;
+
+    for (const nueva of ["segunda", "tercera", "cuarta"]) {
+      fichero = addVaultSlot(fichero, {
+        existingPassword: contrasena(REAL),
+        otherPasswords: claves.slice(1).map(contrasena),
+        newPassword: contrasena(nueva),
+      });
+      claves.push(nueva);
+      // Ninguna de las anteriores se ha perdido por el camino.
+      for (const clave of claves) {
+        expect(verifyVaultPassword(fichero, contrasena(clave))).toBe(true);
+      }
+    }
+
+    // Con las cuatro ranuras declaradas no queda hueco, y hay que decirlo
+    // claramente en vez de sobrescribir una bóveda en silencio.
+    expect(() =>
+      addVaultSlot(fichero, {
+        existingPassword: contrasena(REAL),
+        otherPasswords: claves.slice(1).map(contrasena),
+        newPassword: contrasena("quinta"),
+      }),
+    ).toThrow(/ranura libre/);
+  });
+
+  it("rechaza escribir en una ranura declarada como ocupada", () => {
     const { conUna } = ficheroConDosBovedas();
     const actual = unlockVault(conUna, contrasena(REAL));
     const suya = actual.slot;
@@ -262,7 +294,7 @@ describe("bóveda de coacción y negación plausible", () => {
         newPassword: contrasena(COACCION),
         slot: suya,
       }),
-    ).toThrow(/la ocupa la bóveda de la contraseña actual/);
+    ).toThrow(/ocupa/);
   });
 
   it("la primera bóveda no cae siempre en la misma ranura", () => {
@@ -287,6 +319,8 @@ describe("bóveda de coacción y negación plausible", () => {
     });
     conTres = addVaultSlot(conTres, {
       existingPassword: contrasena(REAL),
+      // Sin declarar la segunda, la elección al azar podría pisarla.
+      otherPasswords: [contrasena("segunda")],
       newPassword: contrasena("tercera"),
     });
 

@@ -212,7 +212,7 @@ export class AuditLedger {
    * anterior. Un fichero al que le hayan borrado, insertado o alterado una
    * entrada falla aquí, antes de que nadie pueda apoyarse en su raíz.
    */
-  static deserialize(bytes: Uint8Array): AuditLedger {
+  static deserialize(bytes: Uint8Array, signingKey?: HybridSigningKeyPair): AuditLedger {
     const reader = new ByteReader(bytes);
     const magic = reader.take(LEDGER_MAGIC.length);
     if (!constantTimeEqual(magic, LEDGER_MAGIC)) {
@@ -225,7 +225,13 @@ export class AuditLedger {
     const publicKey = Uint8Array.from(reader.takeLengthPrefixed());
     const count = reader.takeUint32();
 
-    const ledger = new AuditLedger(publicKey, undefined);
+    // Reanudar un registro exige demostrar que la clave es la suya. Aceptar
+    // otra permitiría continuar el historial de alguien con una clave propia,
+    // que es justo la sustitución de clave que el génesis atado impide.
+    if (signingKey !== undefined && !constantTimeEqual(signingKey.publicKey, publicKey)) {
+      throw new LedgerError("esa clave de firma no es la del registro: no puede continuarlo");
+    }
+    const ledger = new AuditLedger(publicKey, signingKey?.secretKey);
     for (let i = 0; i < count; i++) {
       const entry = decodeEntry(Uint8Array.from(reader.takeLengthPrefixed()));
       if (entry.index !== i) {
