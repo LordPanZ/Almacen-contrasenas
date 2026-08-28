@@ -387,6 +387,70 @@ describe("metadatos y tamaños ocultos", () => {
   });
 });
 
+describe("anexos de la bóveda", () => {
+  it("guarda y recupera bloques opacos por clave", () => {
+    const { vault } = nuevaBoveda();
+    vault.setExtra("recovery", new Uint8Array([1, 2, 3, 4]));
+    vault.setExtra("ledger", new Uint8Array([9, 9]));
+    expect(vault.getExtra("recovery")).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(vault.extraKeys().sort()).toEqual(["ledger", "recovery"]);
+    expect(vault.getExtra("no-existe")).toBeNull();
+  });
+
+  it("los anexos sobreviven a guardar y reabrir", () => {
+    const { vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    vault.setExtra("recovery", utf8Encode("política de guardianes"));
+    const guardado = vault.serialize();
+    vault.lock();
+
+    const reabierta = unlockVault(guardado, contrasena("frase maestra de la bóveda real"));
+    expect(reabierta.getExtra("recovery")).toEqual(utf8Encode("política de guardianes"));
+    expect(reabierta.size).toBe(1);
+  });
+
+  it("auditLog es un atajo sobre los anexos, no un campo aparte", () => {
+    const { vault } = nuevaBoveda();
+    vault.auditLog = new Uint8Array([7, 7, 7]);
+    expect(vault.getExtra("ledger")).toEqual(new Uint8Array([7, 7, 7]));
+    vault.setExtra("ledger", new Uint8Array([1]));
+    expect(vault.auditLog).toEqual(new Uint8Array([1]));
+  });
+
+  it("el contenido de un anexo no aparece en claro en el fichero", () => {
+    const { vault } = nuevaBoveda();
+    vault.setExtra("recovery", utf8Encode("fragmento-secretísimo-de-guardián"));
+    const file = vault.serialize();
+    expect(toHex(file)).not.toContain(toHex(utf8Encode("fragmento-secretísimo-de-guardián")));
+  });
+
+  it("un anexo que no cabe falla sin destruir el anterior", () => {
+    const { vault } = nuevaBoveda({ slotSize: 4096 });
+    vault.setExtra("recovery", new Uint8Array(100).fill(3));
+    expect(() => vault.setExtra("recovery", new Uint8Array(64 * 1024))).toThrow(VaultFullError);
+    // El valor previo sigue intacto: fallar no puede costarte lo que ya tenías.
+    expect(vault.getExtra("recovery")).toEqual(new Uint8Array(100).fill(3));
+  });
+
+  it("rechaza claves de anexo vacías o desmedidas", () => {
+    const { vault } = nuevaBoveda();
+    expect(() => vault.setExtra("", new Uint8Array(1))).toThrow(VaultError);
+    expect(() => vault.setExtra("k".repeat(300), new Uint8Array(1))).toThrow(VaultError);
+  });
+
+  it("dos bóvedas con los mismos anexos los serializan igual, sea cual sea el orden", () => {
+    // Sin orden estable, el criptograma dependería de en qué orden los escribió
+    // el programa, y eso filtraría el orden de las operaciones del usuario.
+    const uno = nuevaBoveda();
+    uno.vault.setExtra("bbb", new Uint8Array([2]));
+    uno.vault.setExtra("aaa", new Uint8Array([1]));
+    const otro = nuevaBoveda();
+    otro.vault.setExtra("aaa", new Uint8Array([1]));
+    otro.vault.setExtra("bbb", new Uint8Array([2]));
+    expect(uno.vault.usedBytes).toBe(otro.vault.usedBytes);
+    expect(uno.vault.extraKeys().sort()).toEqual(otro.vault.extraKeys().sort());
+  });
+});
+
 describe("capacidad de la ranura", () => {
   it("avisa claramente cuando la bóveda se llena y no pierde el estado anterior", () => {
     const { vault } = nuevaBoveda({ slotSize: 4096 });
