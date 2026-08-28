@@ -1,0 +1,405 @@
+import { describe, expect, it } from "vitest";
+import { SecretBuffer, toHex, utf8Encode } from "@cerbero/crypto";
+import {
+  DEFAULT_SLOT_COUNT,
+  UnlockedVault,
+  VaultError,
+  VaultFullError,
+  VaultLockedError,
+  VAULT_HEADER_LENGTH,
+  VaultUnlockError,
+  addVaultSlot,
+  createVault,
+  unlockVault,
+  vaultFileInfo,
+  verifyVaultPassword,
+  type VaultItemDraft,
+} from "../src/index.ts";
+
+const PERFIL = "test" as const;
+
+function contrasena(texto: string): SecretBuffer {
+  return SecretBuffer.fromText(texto);
+}
+
+function nuevaBoveda(opciones: { items?: readonly VaultItemDraft[]; slotSize?: number } = {}) {
+  return createVault(contrasena("frase maestra de la bóveda real"), {
+    argon2Profile: PERFIL,
+    ...opciones,
+  });
+}
+
+const ENTRADA_BANCO: VaultItemDraft = {
+  type: "login",
+  title: "Banco Santander",
+  username: "urko@ejemplo.es",
+  secret: "contraseña-del-banco-9f3a",
+  url: "https://particulares.bancosantander.es",
+  notes: "Tarjeta de coordenadas en el cajón",
+  tags: ["finanzas", "crítico"],
+};
+
+describe("ciclo de vida de la bóveda", () => {
+  it("crea, guarda y vuelve a abrir con los mismos ítems", () => {
+    const { file, vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    const guardado = vault.serialize();
+    vault.lock();
+
+    const reabierta = unlockVault(guardado, contrasena("frase maestra de la bóveda real"));
+    expect(reabierta.size).toBe(1);
+    const item = reabierta.find("santander")[0];
+    expect(item?.title).toBe("Banco Santander");
+    expect(item?.secret).toBe("contraseña-del-banco-9f3a");
+    expect(item?.tags).toEqual(["finanzas", "crítico"]);
+    expect(file.length).toBe(guardado.length);
+  });
+
+  it("añade, actualiza y borra entradas", () => {
+    const { vault } = nuevaBoveda();
+    const item = vault.add(ENTRADA_BANCO);
+    expect(vault.size).toBe(1);
+
+    const actualizado = vault.update(item.id, { secret: "nueva-contraseña", title: "Banco (nuevo)" });
+    expect(actualizado.title).toBe("Banco (nuevo)");
+    expect(actualizado.secret).toBe("nueva-contraseña");
+    expect(actualizado.createdAt).toBe(item.createdAt);
+
+    expect(vault.remove(item.id)).toBe(true);
+    expect(vault.remove(item.id)).toBe(false);
+    expect(vault.size).toBe(0);
+  });
+
+  it("busca por título, usuario, dirección, notas y etiquetas", () => {
+    const { vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    for (const consulta of ["santander", "urko@", "bancosantander.es", "coordenadas", "finanzas"]) {
+      expect(vault.find(consulta)).toHaveLength(1);
+    }
+    expect(vault.find("no-existe-esto")).toHaveLength(0);
+  });
+
+  it("rechaza actualizar un ítem inexistente y títulos vacíos", () => {
+    const { vault } = nuevaBoveda();
+    expect(() => vault.update("00".repeat(16), { title: "x" })).toThrow(VaultError);
+    expect(() => vault.add({ ...ENTRADA_BANCO, title: "   " })).toThrow(VaultError);
+  });
+
+  it("lock borra las claves y todo uso posterior falla", () => {
+    const { vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    vault.lock();
+    expect(vault.locked).toBe(true);
+    expect(() => vault.add(ENTRADA_BANCO)).toThrow(VaultLockedError);
+    expect(() => vault.serialize()).toThrow(VaultLockedError);
+    expect(() => vault.get("x")).toThrow(VaultLockedError);
+  });
+
+  it("las claves de identidad son deterministas para la misma bóveda", () => {
+    const { vault } = nuevaBoveda();
+    const guardado = vault.serialize();
+    const primera = vault.identityKeyPair().publicKey;
+    const firma = vault.signingKeyPair().publicKey;
+    vault.lock();
+
+    const reabierta = unlockVault(guardado, contrasena("frase maestra de la bóveda real"));
+    expect(reabierta.identityKeyPair().publicKey).toEqual(primera);
+    expect(reabierta.signingKeyPair().publicKey).toEqual(firma);
+  });
+});
+
+describe("contraseña incorrecta", () => {
+  it("falla al abrir y verifyVaultPassword lo refleja", () => {
+    const { file } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    expect(() => unlockVault(file, contrasena("no es la contraseña"))).toThrow(VaultUnlockError);
+    expect(verifyVaultPassword(file, contrasena("no es la contraseña"))).toBe(false);
+    expect(verifyVaultPassword(file, contrasena("frase maestra de la bóveda real"))).toBe(true);
+  });
+
+  it("una contraseña incorrecta falla igual que una ranura vacía", () => {
+    // Fichero con UNA bóveda: tres de sus cuatro ranuras son ruido. Fallar
+    // contra ruido y fallar contra una ranura ajena deben ser indistinguibles.
+    const { file } = nuevaBoveda();
+    const mensajes = new Set<string>();
+    for (const intento of ["mala-1", "mala-2", "mala-3", "mala-4", "mala-5"]) {
+      try {
+        unlockVault(file, contrasena(intento));
+      } catch (error) {
+        mensajes.add((error as Error).message);
+      }
+    }
+    expect(mensajes.size).toBe(1);
+  });
+
+  it("alterar la cabecera impide abrir cualquier bóveda del fichero", () => {
+    // La cabecera entra en el `aad` de todas las ranuras, así que tocarla
+    // invalida el fichero entero: no se puede trasplantar una ranura a otro
+    // fichero con otra sal ni cambiarle los parámetros de Argon2.
+    const { file } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    for (const posicion of [0, 10, 20, VAULT_HEADER_LENGTH - 1]) {
+      const alterado = Uint8Array.from(file);
+      alterado[posicion] ^= 0x01;
+      expect(() => unlockVault(alterado, contrasena("frase maestra de la bóveda real"))).toThrow();
+    }
+  });
+
+  it("alterar un byte de tu propia ranura impide abrirla", () => {
+    const { file, vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    const guardado = vault.serialize();
+    const { slotSize } = vaultFileInfo(guardado);
+    const inicio = VAULT_HEADER_LENGTH + vault.slot * slotSize;
+    vault.lock();
+
+    for (const desplazamiento of [0, 100, slotSize - 1]) {
+      const alterado = Uint8Array.from(guardado);
+      (alterado[inicio + desplazamiento] as number) ^= 0x01;
+      expect(() => unlockVault(alterado, contrasena("frase maestra de la bóveda real"))).toThrow(
+        VaultUnlockError,
+      );
+    }
+    expect(file.length).toBe(guardado.length);
+  });
+
+  it("alterar OTRA ranura no afecta a la tuya, y eso es intencionado", () => {
+    // Las ranuras son criptográficamente independientes. Que corromper un
+    // señuelo no arrastre tu bóveda real es la otra cara de la negación
+    // plausible: cada una vive y muere por su cuenta.
+    const { vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    const guardado = vault.serialize();
+    const { slotSize, slotCount } = vaultFileInfo(guardado);
+    const propia = vault.slot;
+    vault.lock();
+
+    const ajena = (propia + 1) % slotCount;
+    const alterado = Uint8Array.from(guardado);
+    (alterado[VAULT_HEADER_LENGTH + ajena * slotSize + 50] as number) ^= 0xff;
+
+    const reabierta = unlockVault(alterado, contrasena("frase maestra de la bóveda real"));
+    expect(reabierta.find("santander")).toHaveLength(1);
+  });
+});
+
+describe("bóveda de coacción y negación plausible", () => {
+  const REAL = "frase maestra de la bóveda real";
+  const COACCION = "esta es la que doy si me obligan";
+
+  function ficheroConDosBovedas() {
+    const { vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    const conUna = vault.serialize();
+    vault.lock();
+    const conDos = addVaultSlot(conUna, {
+      existingPassword: contrasena(REAL),
+      newPassword: contrasena(COACCION),
+      items: [
+        { type: "login", title: "Correo personal", username: "yo@ejemplo.es", secret: "algo-creible" },
+      ],
+    });
+    return { conUna, conDos };
+  }
+
+  it("cada contraseña abre una bóveda distinta e independiente", () => {
+    const { conDos } = ficheroConDosBovedas();
+
+    const real = unlockVault(conDos, contrasena(REAL));
+    const senuelo = unlockVault(conDos, contrasena(COACCION));
+
+    expect(real.find("santander")).toHaveLength(1);
+    expect(real.find("Correo personal")).toHaveLength(0);
+    expect(senuelo.find("Correo personal")).toHaveLength(1);
+    expect(senuelo.find("santander")).toHaveLength(0);
+    expect(real.vaultId).not.toBe(senuelo.vaultId);
+    expect(real.slot).not.toBe(senuelo.slot);
+  });
+
+  it("añadir una bóveda no cambia el tamaño ni la cabecera del fichero", () => {
+    const { conUna, conDos } = ficheroConDosBovedas();
+    expect(conDos.length).toBe(conUna.length);
+
+    const antes = vaultFileInfo(conUna);
+    const despues = vaultFileInfo(conDos);
+    expect(despues.slotCount).toBe(antes.slotCount);
+    expect(despues.slotSize).toBe(antes.slotSize);
+    expect(despues.salt).toEqual(antes.salt);
+    // La cabecera entera es idéntica: nada en lo público dice cuántas bóvedas hay.
+    const cabecera = (f: Uint8Array) => toHex(f.subarray(0, VAULT_HEADER_LENGTH));
+    expect(cabecera(conDos)).toBe(cabecera(conUna));
+  });
+
+  it("escribir en una bóveda deja las demás ranuras byte a byte idénticas", () => {
+    const { conDos } = ficheroConDosBovedas();
+    const real = unlockVault(conDos, contrasena(REAL));
+    real.add({ type: "note", title: "Nota nueva", notes: "algo" });
+    const despues = real.serialize();
+
+    // La bóveda de coacción sigue abriéndose y con su contenido intacto.
+    const senuelo = unlockVault(despues, contrasena(COACCION));
+    expect(senuelo.find("Correo personal")).toHaveLength(1);
+    expect(senuelo.size).toBe(1);
+
+    // Y sus bytes no se han tocado.
+    const tamanoRanura = vaultFileInfo(despues).slotSize;
+    const inicio = VAULT_HEADER_LENGTH + senuelo.slot * tamanoRanura;
+    expect(toHex(despues.subarray(inicio, inicio + tamanoRanura))).toBe(
+      toHex(conDos.subarray(inicio, inicio + tamanoRanura)),
+    );
+  });
+
+  it("no deja reutilizar una contraseña que ya abre una ranura", () => {
+    const { conUna } = ficheroConDosBovedas();
+    expect(() =>
+      addVaultSlot(conUna, {
+        existingPassword: contrasena(REAL),
+        newPassword: contrasena(REAL),
+      }),
+    ).toThrow(/ya abre una bóveda/);
+  });
+
+  it("no deja escribir sobre la ranura que ocupa la contraseña actual", () => {
+    const { conUna } = ficheroConDosBovedas();
+    const actual = unlockVault(conUna, contrasena(REAL));
+    const suya = actual.slot;
+    actual.lock();
+    expect(() =>
+      addVaultSlot(conUna, {
+        existingPassword: contrasena(REAL),
+        newPassword: contrasena(COACCION),
+        slot: suya,
+      }),
+    ).toThrow(/la ocupa la bóveda de la contraseña actual/);
+  });
+
+  it("la primera bóveda no cae siempre en la misma ranura", () => {
+    // Si cayera siempre en la 0, quien te coaccionara y viera que la suya es
+    // la 2 sabría que existe otra bóveda: el índice delataría el secreto.
+    const ranuras = new Set<number>();
+    for (let i = 0; i < 25; i++) {
+      const { vault } = nuevaBoveda();
+      ranuras.add(vault.slot);
+      vault.lock();
+    }
+    expect(ranuras.size).toBeGreaterThan(1);
+  });
+
+  it("un fichero con una bóveda y otro con tres son indistinguibles en lo público", () => {
+    const { vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    let conTres = vault.serialize();
+    vault.lock();
+    conTres = addVaultSlot(conTres, {
+      existingPassword: contrasena(REAL),
+      newPassword: contrasena("segunda"),
+    });
+    conTres = addVaultSlot(conTres, {
+      existingPassword: contrasena(REAL),
+      newPassword: contrasena("tercera"),
+    });
+
+    const { vault: otra } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    const conUna = otra.serialize();
+    otra.lock();
+
+    expect(conTres.length).toBe(conUna.length);
+    expect(vaultFileInfo(conTres).slotCount).toBe(vaultFileInfo(conUna).slotCount);
+    // Las tres se abren, cada una con su contraseña.
+    for (const clave of [REAL, "segunda", "tercera"]) {
+      expect(verifyVaultPassword(conTres, contrasena(clave))).toBe(true);
+    }
+  });
+});
+
+describe("metadatos y tamaños ocultos", () => {
+  it("ni el título, ni la dirección, ni el usuario aparecen en el fichero", () => {
+    const { vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    const file = vault.serialize();
+    const bytes = toHex(file);
+
+    for (const secreto of [
+      "Banco Santander",
+      "urko@ejemplo.es",
+      "particulares.bancosantander.es",
+      "contraseña-del-banco-9f3a",
+      "finanzas",
+    ]) {
+      expect(bytes).not.toContain(toHex(utf8Encode(secreto)));
+    }
+  });
+
+  it("el fichero no revela cuántos ítems hay: su tamaño no depende del contenido", () => {
+    const uno = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    const muchos = nuevaBoveda({
+      items: Array.from({ length: 40 }, (_, i) => ({
+        type: "login" as const,
+        title: `Servicio ${i}`,
+        secret: `clave-${i}`,
+      })),
+    });
+    expect(muchos.file.length).toBe(uno.file.length);
+    expect(muchos.vault.serialize().length).toBe(uno.vault.serialize().length);
+  });
+
+  it("una entrada corta y una larga ocupan lo mismo gracias al relleno por cubos", () => {
+    const { vault } = nuevaBoveda();
+    const corta = vault.add({ type: "note", title: "a", notes: "b" });
+    const usadoTrasCorta = vault.usedBytes;
+    vault.remove(corta.id);
+
+    vault.add({ type: "note", title: "a", notes: "b".repeat(100) });
+    expect(vault.usedBytes).toBe(usadoTrasCorta);
+  });
+
+  it("una nota muy larga sí salta al cubo siguiente", () => {
+    const { vault } = nuevaBoveda();
+    const pequena = vault.add({ type: "note", title: "n", notes: "x" });
+    const usadoPequena = vault.usedBytes;
+    vault.remove(pequena.id);
+    vault.add({ type: "note", title: "n", notes: "x".repeat(5000) });
+    expect(vault.usedBytes).toBeGreaterThan(usadoPequena);
+  });
+});
+
+describe("capacidad de la ranura", () => {
+  it("avisa claramente cuando la bóveda se llena y no pierde el estado anterior", () => {
+    const { vault } = nuevaBoveda({ slotSize: 4096 });
+    const relleno = { type: "note" as const, title: "relleno", notes: "y".repeat(900) };
+
+    let anadidos = 0;
+    let error: unknown = null;
+    for (let i = 0; i < 50; i++) {
+      try {
+        vault.add({ ...relleno, title: `relleno ${i}` });
+        anadidos++;
+      } catch (e) {
+        error = e;
+        break;
+      }
+    }
+    expect(error).toBeInstanceOf(VaultFullError);
+    expect((error as Error).message).toMatch(/llena/);
+    // El ítem que no cabía se revirtió: lo anterior sigue siendo guardable.
+    expect(vault.size).toBe(anadidos);
+    expect(() => vault.serialize()).not.toThrow();
+  });
+
+  it("rechaza geometrías absurdas al crear", () => {
+    const clave = () => contrasena("x");
+    expect(() => createVault(clave(), { argon2Profile: PERFIL, slotCount: 1 })).toThrow(VaultError);
+    expect(() => createVault(clave(), { argon2Profile: PERFIL, slotSize: 16 })).toThrow(VaultError);
+  });
+
+  it("respeta el número de ranuras solicitado", () => {
+    const { file, vault } = createVault(contrasena("x"), {
+      argon2Profile: PERFIL,
+      slotCount: 8,
+      slotSize: 2048,
+    });
+    expect(vaultFileInfo(file).slotCount).toBe(8);
+    expect(vault.slotCount).toBe(8);
+    expect(vault.slot).toBeLessThan(8);
+    expect(vaultFileInfo(file).slotCount).not.toBe(DEFAULT_SLOT_COUNT);
+  });
+});
+
+describe("superficie de la clase", () => {
+  it("UnlockedVault no se puede construir desde fuera con `new`", () => {
+    // El constructor es privado: solo createVault y unlockVault producen bóvedas,
+    // así que no hay forma de fabricar una con un sobre inventado.
+    expect(typeof UnlockedVault).toBe("function");
+    expect(() => (UnlockedVault as unknown as new () => unknown)()).toThrow();
+  });
+});
