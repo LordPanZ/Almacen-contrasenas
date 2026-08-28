@@ -103,6 +103,53 @@ export interface EntradaAuditoria {
   readonly tipo: string;
 }
 
+export interface GuardianPublico {
+  readonly id: string;
+  readonly nombre: string;
+  /** Huella corta de la clave pública: comparable a voz por otro canal. */
+  readonly huella: string;
+  readonly anadidoEn: number;
+}
+
+export interface PoliticaGuardianes {
+  readonly policyId: string;
+  readonly umbral: number;
+  readonly creadaEn: number;
+  readonly guardianes: readonly GuardianPublico[];
+}
+
+/** Fichero listo para entregarle a un guardián. Se descarga, no se guarda. */
+export interface SobreGuardian {
+  readonly nombre: string;
+  readonly huella: string;
+  readonly fichero: string;
+  readonly bytes: Uint8Array;
+}
+
+export type EstadoSwitch = "activo" | "vencido" | "en-gracia" | "liberable" | "revocado";
+
+export interface EstadoInterruptor {
+  readonly id: string;
+  readonly creadoEn: number;
+  readonly intervaloDias: number;
+  readonly graciaDias: number;
+  readonly ultimaSenal: number;
+  readonly revocado: boolean;
+  readonly estado: EstadoSwitch;
+  readonly descripcion: string;
+  readonly restanteMs: number;
+}
+
+export interface Herencia {
+  readonly legado: { readonly fichero: string; readonly bytes: Uint8Array };
+  readonly sobres: readonly SobreGuardian[];
+  readonly elevaciones: number;
+  readonly velocidad: number;
+  /** El plazo pedido no cabía en el formato del puzzle y se recortó. */
+  readonly recortado: boolean;
+  readonly duracionEfectivaMs: number;
+}
+
 export const nucleo = {
   crear: (password: string, perfil: string, ranuras: number) =>
     llamar<{ resumen: ResumenBoveda; fichero: Uint8Array }>("crear", { password, perfil, ranuras }),
@@ -129,6 +176,45 @@ export const nucleo = {
   generar: (frase: boolean, longitud: number, palabras: number) =>
     llamar<{ valor: string; fuerza: Fuerza }>("generar", { frase, longitud, palabras }),
   evaluar: (password: string) => llamar<{ fuerza: Fuerza }>("evaluar", { password }),
+  politicaGuardianes: () =>
+    llamar<{ politica: PoliticaGuardianes | null }>("politicaGuardianes"),
+  configurarGuardianes: (password: string, nombres: readonly string[], umbral: number) =>
+    llamar<{ fichero: Uint8Array; politica: PoliticaGuardianes; sobres: SobreGuardian[] }>(
+      "configurarGuardianes",
+      { password, nombres, umbral },
+    ),
+  revocarGuardianes: () => llamar<{ fichero: Uint8Array }>("revocarGuardianes"),
+  recuperarConSobres: (sobres: readonly { nombre: string; bytes: Uint8Array }[]) =>
+    llamar<{ password: string; aportados: number; umbral: number; nombres: string[] }>(
+      "recuperarConSobres",
+      { sobres },
+    ),
+  estadoInterruptor: () => llamar<{ interruptor: EstadoInterruptor | null }>("estadoInterruptor"),
+  crearInterruptor: (intervaloDias: number, graciaDias: number) =>
+    llamar<{ fichero: Uint8Array; interruptor: EstadoInterruptor }>("crearInterruptor", {
+      intervaloDias,
+      graciaDias,
+    }),
+  senalDeVida: () =>
+    llamar<{ fichero: Uint8Array; interruptor: EstadoInterruptor }>("senalDeVida"),
+  revocarInterruptor: () =>
+    llamar<{ fichero: Uint8Array; interruptor: EstadoInterruptor }>("revocarInterruptor"),
+  crearHerencia: (
+    password: string,
+    nombres: readonly string[],
+    umbral: number,
+    plazoDias: number,
+    intervaloDias: number,
+    graciaDias: number,
+  ) =>
+    llamar<Herencia>("crearHerencia", {
+      password,
+      nombres,
+      umbral,
+      plazoDias,
+      intervaloDias,
+      graciaDias,
+    }),
   cerrar: () => llamar<{ cerrada: boolean }>("cerrar"),
 };
 
