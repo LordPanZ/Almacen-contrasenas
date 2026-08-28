@@ -1,0 +1,27 @@
+{
+  "name": "@cerbero/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Interfaz gráfica de Cerbero: todo el cifrado ocurre en el navegador",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@cerbero/crypto": "workspace:*",
+    "@cerbero/guardians": "workspace:*",
+    "@cerbero/ledger": "workspace:*",
+    "@cerbero/sentinel": "workspace:*",
+    "@cerbero/vault": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  }
+}

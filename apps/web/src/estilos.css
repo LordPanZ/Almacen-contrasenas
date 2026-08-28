@@ -1,0 +1,687 @@
+/*
+ * Cerbero — sistema visual.
+ *
+ * Dirección: instrumento de precisión. Un panel de laboratorio, no una app.
+ * Grafito cálido, retícula de líneas capilares, tipografía de ingeniería y un
+ * único acento ámbar de señal que solo aparece cuando algo importa. La espera
+ * de Argon2 no se disimula: se muestra, porque ese coste es lo que te protege.
+ */
+
+:root {
+  /* Grafito cálido: negro puro es plano y cansa; este tiene temperatura. */
+  --fondo: #0c0d0e;
+  --fondo-panel: #131416;
+  --fondo-panel-alto: #191b1d;
+  --fondo-hueco: #08090a;
+
+  --linea: #24262a;
+  --linea-viva: #33363b;
+
+  --texto: #e9e6e0;
+  --texto-medio: #a5a29b;
+  --texto-tenue: #6e6c67;
+
+  /* Ámbar de señal, como el testigo de un instrumento. Escaso a propósito. */
+  --senal: #e8a33d;
+  --senal-tenue: rgba(232, 163, 61, 0.14);
+  --jade: #63b795;
+  --jade-tenue: rgba(99, 183, 149, 0.13);
+  --alarma: #e05c4a;
+  --alarma-tenue: rgba(224, 92, 74, 0.14);
+
+  --display: "Archivo", "Helvetica Neue", sans-serif;
+  --mono: "Martian Mono", ui-monospace, "SF Mono", monospace;
+  --prosa: "Newsreader", Georgia, serif;
+
+  --radio: 3px;
+  --rail: 232px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--display);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Grano finísimo: le quita el aspecto de plano digital sin llamar la atención. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* ─── Piezas tipográficas ─────────────────────────────────────────────── */
+
+.etiqueta {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--texto-tenue);
+}
+
+.dato {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* La voz que explica el porqué. El serif la separa de la interfaz. */
+.prosa {
+  font-family: var(--prosa);
+  font-size: 15px;
+  line-height: 1.62;
+  color: var(--texto-medio);
+}
+
+.prosa strong {
+  color: var(--texto);
+  font-weight: 600;
+}
+
+/* ─── Estructura ──────────────────────────────────────────────────────── */
+
+.marco {
+  display: grid;
+  grid-template-columns: var(--rail) 1fr;
+  height: 100%;
+}
+
+.rail {
+  border-right: 1px solid var(--linea);
+  background: var(--fondo-hueco);
+  display: flex;
+  flex-direction: column;
+  padding: 26px 0 18px;
+}
+
+.marca {
+  padding: 0 22px 26px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.marca-nombre {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.045em;
+}
+
+.marca-version {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--texto-tenue);
+  letter-spacing: 0.1em;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 12px;
+  flex: 1;
+}
+
+.nav-grupo {
+  padding: 20px 10px 7px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radio);
+  text-align: left;
+  cursor: pointer;
+  color: var(--texto-medio);
+  font-size: 13px;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.nav-item:hover {
+  background: var(--fondo-panel);
+  color: var(--texto);
+}
+
+.nav-item[aria-current="true"] {
+  background: var(--fondo-panel-alto);
+  color: var(--texto);
+}
+
+/* Testigo lateral: el elemento activo enciende su piloto ámbar. */
+.nav-item[aria-current="true"]::before {
+  content: "";
+  width: 2px;
+  height: 13px;
+  background: var(--senal);
+  margin-left: -10px;
+  margin-right: 8px;
+  border-radius: 2px;
+}
+
+.nav-item .glifo {
+  width: 15px;
+  text-align: center;
+  opacity: 0.65;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.pie-rail {
+  padding: 16px 22px 0;
+  border-top: 1px solid var(--linea);
+  margin-top: 12px;
+}
+
+.lienzo {
+  overflow-y: auto;
+  padding: 34px 40px 64px;
+  max-width: 1080px;
+}
+
+.cabecera-vista {
+  margin-bottom: 26px;
+}
+
+.cabecera-vista h1 {
+  font-size: 27px;
+  margin-bottom: 7px;
+}
+
+/* ─── Tira de ranuras: la tesis del producto, hecha imagen ────────────── */
+
+.tira {
+  display: flex;
+  gap: 5px;
+  margin: 14px 0 8px;
+}
+
+.ranura {
+  flex: 1;
+  height: 30px;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--fondo-panel) 0 2px,
+      var(--fondo-hueco) 2px 4px
+    );
+  position: relative;
+  overflow: hidden;
+}
+
+/* Un barrido lentísimo, igual en todas: ninguna se distingue de otra. */
+.ranura::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(233, 230, 224, 0.05), transparent);
+  transform: translateX(-100%);
+  animation: barrido 7s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.9s);
+}
+
+@keyframes barrido {
+  0%,
+  62% {
+    transform: translateX(-100%);
+  }
+  88%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ─── Paneles ─────────────────────────────────────────────────────────── */
+
+.panel {
+  background: var(--fondo-panel);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  padding: 20px 22px;
+}
+
+.panel + .panel {
+  margin-top: 14px;
+}
+
+.panel-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.rejilla-datos {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  gap: 9px 20px;
+  align-items: baseline;
+}
+
+/* ─── Tabla ───────────────────────────────────────────────────────────── */
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tabla th {
+  text-align: left;
+  padding: 0 14px 9px 0;
+  border-bottom: 1px solid var(--linea);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--texto-tenue);
+  font-weight: 500;
+}
+
+.tabla td {
+  padding: 11px 14px 11px 0;
+  border-bottom: 1px solid var(--linea);
+  vertical-align: baseline;
+}
+
+.tabla tbody tr {
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.tabla tbody tr:hover {
+  background: var(--fondo-panel-alto);
+}
+
+.tabla tbody tr[aria-selected="true"] {
+  background: var(--fondo-panel-alto);
+}
+
+/* ─── Distintivos ─────────────────────────────────────────────────────── */
+
+.distintivo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.distintivo.senal {
+  background: var(--senal-tenue);
+  color: var(--senal);
+  border-color: rgba(232, 163, 61, 0.28);
+}
+
+.distintivo.jade {
+  background: var(--jade-tenue);
+  color: var(--jade);
+  border-color: rgba(99, 183, 149, 0.26);
+}
+
+.distintivo.alarma {
+  background: var(--alarma-tenue);
+  color: var(--alarma);
+  border-color: rgba(224, 92, 74, 0.3);
+}
+
+.distintivo.neutro {
+  background: var(--fondo-panel-alto);
+  color: var(--texto-tenue);
+  border-color: var(--linea);
+}
+
+/* ─── Controles ───────────────────────────────────────────────────────── */
+
+.campo {
+  display: block;
+  margin-bottom: 15px;
+}
+
+.campo > .etiqueta {
+  display: block;
+  margin-bottom: 6px;
+}
+
+input[type="text"],
+input[type="password"],
+textarea,
+select {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--fondo-hueco);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--linea-viva);
+  box-shadow: 0 0 0 3px rgba(232, 163, 61, 0.09);
+}
+
+input::placeholder {
+  color: var(--texto-tenue);
+}
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  background: var(--fondo-panel-alto);
+  border: 1px solid var(--linea-viva);
+  border-radius: var(--radio);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 140ms ease, border-color 140ms ease, transform 90ms ease;
+}
+
+.boton:hover:not(:disabled) {
+  background: #202225;
+  border-color: #40444a;
+}
+
+.boton:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.boton:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.boton.principal {
+  background: var(--senal);
+  border-color: var(--senal);
+  color: #16110a;
+  font-weight: 650;
+}
+
+.boton.principal:hover:not(:disabled) {
+  background: #f0af4e;
+  border-color: #f0af4e;
+}
+
+.boton.peligro:hover:not(:disabled) {
+  border-color: var(--alarma);
+  color: var(--alarma);
+}
+
+.barra-acciones {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ─── Avisos ──────────────────────────────────────────────────────────── */
+
+.aviso {
+  display: flex;
+  gap: 11px;
+  padding: 13px 15px;
+  border-radius: var(--radio);
+  border: 1px solid;
+  margin-bottom: 15px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.aviso.alarma {
+  background: var(--alarma-tenue);
+  border-color: rgba(224, 92, 74, 0.3);
+  color: #f0a99e;
+}
+
+.aviso.senal {
+  background: var(--senal-tenue);
+  border-color: rgba(232, 163, 61, 0.28);
+  color: #f0c98a;
+}
+
+.aviso.jade {
+  background: var(--jade-tenue);
+  border-color: rgba(99, 183, 149, 0.26);
+  color: #9fd4bc;
+}
+
+.aviso .glifo {
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+
+/* ─── Portada / desbloqueo ────────────────────────────────────────────── */
+
+.portada {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 40px 24px;
+  /* Halo tenue: da profundidad sin recurrir a un degradado de color. */
+  background:
+    radial-gradient(ellipse 900px 620px at 50% -10%, rgba(232, 163, 61, 0.05), transparent 70%),
+    var(--fondo);
+}
+
+.portada-caja {
+  width: 100%;
+  max-width: 452px;
+}
+
+.portada-marca {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 44px;
+  letter-spacing: -0.055em;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+
+.portada-lema {
+  font-family: var(--prosa);
+  font-size: 16px;
+  color: var(--texto-medio);
+  margin-bottom: 30px;
+  font-style: italic;
+}
+
+/* ─── Espera de Argon2: el coste se enseña, no se disimula ────────────── */
+
+.derivando {
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  padding: 18px 20px;
+  background: var(--fondo-panel);
+}
+
+.derivando-barra {
+  height: 2px;
+  background: var(--linea);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 13px 0 11px;
+}
+
+.derivando-barra span {
+  display: block;
+  height: 100%;
+  width: 34%;
+  background: var(--senal);
+  animation: reptar 1.55s ease-in-out infinite;
+}
+
+@keyframes reptar {
+  0% {
+    transform: translateX(-105%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+/* ─── Aparición escalonada al cargar ──────────────────────────────────── */
+
+.aparece {
+  animation: aparecer 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Detalle: secreto revelable ──────────────────────────────────────── */
+
+.secreto {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.secreto-valor {
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 7px 11px;
+  background: var(--fondo-hueco);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  flex: 1;
+  word-break: break-all;
+}
+
+.secreto-valor.oculto {
+  color: var(--texto-tenue);
+  letter-spacing: 0.22em;
+  user-select: none;
+}
+
+.medidor {
+  height: 3px;
+  background: var(--linea);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 7px;
+}
+
+.medidor span {
+  display: block;
+  height: 100%;
+  transition: width 320ms ease;
+}
+
+.vacio {
+  padding: 44px 20px;
+  text-align: center;
+  color: var(--texto-tenue);
+  border: 1px dashed var(--linea);
+  border-radius: var(--radio);
+}
+
+.lista-hashes {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--texto-tenue);
+  word-break: break-all;
+  line-height: 1.7;
+}
+
+@media (max-width: 860px) {
+  .marco {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    border-right: none;
+    border-bottom: 1px solid var(--linea);
+  }
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .nav-grupo {
+    display: none;
+  }
+  .lienzo {
+    padding: 24px 20px 48px;
+  }
+  .rejilla-datos {
+    grid-template-columns: 1fr;
+    gap: 4px 0;
+  }
+}
