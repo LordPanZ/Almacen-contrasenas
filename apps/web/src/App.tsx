@@ -49,6 +49,8 @@ export function App() {
   const [filas, setFilas] = useState<FilaEntrada[]>([]);
   const [vista, setVista] = useState<Vista>("entradas");
   const [cargando, setCargando] = useState(true);
+  // `null` mientras no se sabe; `false` en cuanto un guardado falla.
+  const [almacenDisponible, setAlmacenDisponible] = useState<boolean | null>(null);
 
   useEffect(() => {
     void leerLocal().then((encontrado) => {
@@ -61,7 +63,7 @@ export function App() {
     setResumen(nuevoResumen);
     setFichero(nuevoFichero);
     setPassword(clave);
-    await guardarLocal(nuevoFichero);
+    setAlmacenDisponible(await guardarLocal(nuevoFichero));
     const { filas: iniciales } = await nucleo.listar();
     setFilas(iniciales);
   }
@@ -72,7 +74,7 @@ export function App() {
     setResumen((previo) =>
       previo ? { ...previo, entradas: nuevasFilas.length } : previo,
     );
-    await guardarLocal(nuevoFichero);
+    setAlmacenDisponible(await guardarLocal(nuevoFichero));
   }
 
   async function cerrar() {
@@ -132,6 +134,18 @@ export function App() {
       </nav>
 
       <main className="lienzo">
+        {almacenDisponible === false && (
+          <div className="aviso senal" style={{ marginBottom: 20 }}>
+            <span className="glifo">!</span>
+            <span>
+              Aquí no se puede guardar nada entre sesiones. Al abrir el fichero HTML directamente
+              desde el disco, el navegador le da a la página un origen anónimo distinto en cada
+              carga, así que lo que se escriba no se vuelve a encontrar. La bóveda funciona con
+              normalidad, pero <strong>solo vive en esta pestaña</strong>: descárgala desde{" "}
+              <em>El fichero</em> antes de cerrar, o perderás lo que hayas hecho.
+            </span>
+          </div>
+        )}
         <div key={vista} className="aparece">
           {vista === "entradas" && (
             <VistaEntradas filas={filas} alCambiar={(f, b) => void actualizar(f, b)} />
@@ -145,7 +159,7 @@ export function App() {
               passwordActual={password}
               alActualizarFichero={(b) => {
                 setFichero(b);
-                void guardarLocal(b);
+                void guardarLocal(b).then(setAlmacenDisponible);
               }}
             />
           )}

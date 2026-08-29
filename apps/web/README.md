@@ -5,9 +5,29 @@ como ficheros estáticos, así que no existe ninguna máquina que pudiera ver tu
 secretos aunque quisiera.
 
 ```bash
-pnpm --filter @cerbero/web dev      # desarrollo
-pnpm --filter @cerbero/web build    # ficheros estáticos en dist/
+pnpm --filter @cerbero/web dev            # desarrollo
+pnpm --filter @cerbero/web build          # ficheros estáticos en dist/
+pnpm --filter @cerbero/web build:suelto   # UN solo fichero: cerbero.html
 ```
+
+## El fichero suelto
+
+`build:suelto` produce `cerbero.html`: la aplicación entera —código, estilos,
+trabajador criptográfico y tipografías— en un único fichero de unos 1,7 MiB que
+se abre con doble clic, cabe en una memoria USB y **no hace ni una sola petición
+a la red**. La compilación falla a propósito si queda alguna referencia externa,
+para que nadie entregue como suelto algo que no lo es.
+
+Encaja con el modelo de amenazas del proyecto: un almacén que presume de que
+ningún servidor puede abrir tu bóveda lo demuestra mejor si además no hace falta
+ningún servidor para usarlo.
+
+**Lo que cambia al abrirlo desde el disco:** el navegador da a la página un
+origen anónimo distinto en cada carga, así que no hay almacenamiento que
+sobreviva a cerrar la pestaña. IndexedDB se abre sin error y la escritura parece
+funcionar —un fallo silencioso con apariencia de éxito—, de modo que la
+aplicación lo detecta por adelantado y lo avisa en pantalla: la bóveda solo vive
+en esa pestaña, y hay que descargarla antes de cerrar.
 
 ## Cómo está montada
 

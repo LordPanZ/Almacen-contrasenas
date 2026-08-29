@@ -1,3 +1,4 @@
+import CerberoWorker from "./boveda.worker.ts?worker&inline";
 import type { Argon2Profile } from "@cerbero/crypto";
 import type { VaultItemDraft, VaultItemType } from "@cerbero/vault";
 
@@ -7,7 +8,7 @@ import type { VaultItemDraft, VaultItemType } from "@cerbero/vault";
  * Una sola instancia para toda la aplicación: la bóveda abierta vive dentro del
  * worker y no debe haber dos copias del estado sensible.
  */
-const worker = new Worker(new URL("./boveda.worker.ts", import.meta.url), { type: "module" });
+const worker = new CerberoWorker();
 
 let siguienteId = 1;
 const pendientes = new Map<number, { ok: (v: unknown) => void; fallo: (e: Error) => void }>();
@@ -224,6 +225,19 @@ const BASE = "cerbero";
 const ALMACEN = "bovedas";
 const CLAVE = "actual";
 
+/**
+ * ¿Sobrevive a cerrar la pestaña lo que guardemos?
+ *
+ * Abierto como fichero local, el navegador da a la página un origen anónimo
+ * distinto en cada carga: IndexedDB se abre sin error, la escritura parece
+ * funcionar y al recargar no hay nada, porque la base ya no es la misma. Es el
+ * peor fallo posible —silencioso y con apariencia de éxito—, así que se detecta
+ * por adelantado en vez de esperar a que algo lance.
+ */
+export function almacenamientoPersistente(): boolean {
+  return globalThis.location?.protocol !== "file:";
+}
+
 function abrirBase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const peticion = indexedDB.open(BASE, 1);
@@ -241,18 +255,30 @@ function abrirBase(): Promise<IDBDatabase> {
  * Aun así es una comodidad, no una copia de seguridad: limpiar los datos del
  * sitio lo borra, así que la app insiste en exportar el fichero.
  */
-export async function guardarLocal(fichero: Uint8Array): Promise<void> {
-  const base = await abrirBase();
-  await new Promise<void>((resolve, reject) => {
-    const tx = base.transaction(ALMACEN, "readwrite");
-    tx.objectStore(ALMACEN).put(fichero, CLAVE);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("no se pudo guardar"));
-  });
-  base.close();
+export async function guardarLocal(fichero: Uint8Array): Promise<boolean> {
+  // Devuelve si se pudo guardar en vez de lanzar. Abierto como fichero local
+  // (file://) el navegador bloquea IndexedDB, y en ventana privada puede
+  // negarla: en esos casos la aplicación tiene que seguir siendo usable y
+  // avisar de que la única copia es la que descargue el usuario. Que un fallo
+  // de comodidad tumbe la bóveda abierta sería absurdo.
+  if (!almacenamientoPersistente()) return false;
+  try {
+    const base = await abrirBase();
+    await new Promise<void>((resolve, reject) => {
+      const tx = base.transaction(ALMACEN, "readwrite");
+      tx.objectStore(ALMACEN).put(fichero, CLAVE);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error("no se pudo guardar"));
+    });
+    base.close();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function leerLocal(): Promise<Uint8Array | null> {
+  if (!almacenamientoPersistente()) return null;
   try {
     const base = await abrirBase();
     const resultado = await new Promise<Uint8Array | null>((resolve, reject) => {
