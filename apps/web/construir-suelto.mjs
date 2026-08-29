@@ -78,6 +78,10 @@ console.log("Compilando…");
 await rm(salida, { recursive: true, force: true });
 await build({
   configFile: `${raiz}vite.config.ts`,
+  // Vite tomaría `process.cwd()` como raíz, así que el guion solo funcionaba
+  // si se lanzaba desde `apps/web`. Fijarla aquí lo hace invocable desde
+  // cualquier sitio, que es lo que necesita el build de Netlify.
+  root: raiz,
   build: {
     outDir: salida,
     emptyOutDir: true,

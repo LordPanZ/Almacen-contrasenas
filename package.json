@@ -4,18 +4,27 @@
   "private": true,
   "type": "module",
   "description": "Cerbero — almacén de contraseñas de conocimiento cero con criptografía híbrida post-cuántica",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc --build",
     "clean": "tsc --build --clean",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --build --force",
-    "cerbero": "node --experimental-strip-types apps/cli/src/main.ts"
+    "cerbero": "node --experimental-strip-types apps/cli/src/main.ts",
+    "construir:suelto": "node apps/web/construir-suelto.mjs",
+    "construir:netlify": "node apps/web/construir-suelto.mjs && node apps/web/construir-netlify.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

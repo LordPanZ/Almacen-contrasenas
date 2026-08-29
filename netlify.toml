@@ -1,0 +1,16 @@
+# Despliegue del fichero suelto de Cerbero.
+#
+# Lo que se publica es el mismo HTML autocontenido que se descarga a mano:
+# una sola página sin peticiones a la red. Servirlo por HTTPS no cambia la
+# aplicación, pero sí dos cosas prácticas frente a abrirlo desde el disco:
+# IndexedDB funciona —así que la bóveda sobrevive a cerrar la pestaña— y el
+# teléfono puede instalarlo como acceso directo.
+
+[build]
+  command = "pnpm run construir:netlify"
+  publish = "apps/web/dist-netlify"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # El repositorio es un workspace de pnpm: con npm, `workspace:*` no resuelve.
+  PNPM_FLAGS = "--frozen-lockfile"
