@@ -18,6 +18,13 @@ import {
 
 const PERFIL = "test" as const;
 
+/** Bytes crudos de una ranura, para comparar que un guardado no la ha tocado. */
+function trozoDeRanura(fichero: Uint8Array, ranura: number): string {
+  const tamano = vaultFileInfo(fichero).slotSize;
+  const inicio = VAULT_HEADER_LENGTH + ranura * tamano;
+  return toHex(fichero.subarray(inicio, inicio + tamano));
+}
+
 function contrasena(texto: string): SecretBuffer {
   return SecretBuffer.fromText(texto);
 }
@@ -527,5 +534,116 @@ describe("superficie de la clase", () => {
     // así que no hay forma de fabricar una con un sobre inventado.
     expect(typeof UnlockedVault).toBe("function");
     expect(() => (UnlockedVault as unknown as new () => unknown)()).toThrow();
+  });
+});
+
+describe("factor de hardware", () => {
+  const clave = () => SecretBuffer.fromText("correcto caballo grapa");
+  const FACTOR = new Uint8Array(32).fill(0xa1);
+  const OTRO = new Uint8Array(32).fill(0xb2);
+
+  it("la contraseña sola no abre una bóveda vinculada a una llave", () => {
+    const { file } = createVault(clave(), { argon2Profile: "test", hardwareFactor: FACTOR });
+    expect(() => unlockVault(file, clave())).toThrow(VaultUnlockError);
+  });
+
+  it("abre con la contraseña y el factor correctos", () => {
+    const { file } = createVault(clave(), {
+      argon2Profile: "test",
+      hardwareFactor: FACTOR,
+      items: [{ type: "login", title: "Netflix", secret: "s3cr3to" }],
+    });
+    const abierta = unlockVault(file, clave(), { hardwareFactor: FACTOR });
+    expect(abierta.list()).toHaveLength(1);
+    abierta.lock();
+  });
+
+  it("otro factor no abre, aunque la contraseña sea la buena", () => {
+    const { file } = createVault(clave(), { argon2Profile: "test", hardwareFactor: FACTOR });
+    expect(() => unlockVault(file, clave(), { hardwareFactor: OTRO })).toThrow(VaultUnlockError);
+  });
+
+  it("el fichero no delata que haya una llave de por medio", () => {
+    // Mismos parámetros y misma geometría: lo público debe ser indistinguible.
+    const con = createVault(clave(), { argon2Profile: "test", hardwareFactor: FACTOR }).file;
+    const sin = createVault(clave(), { argon2Profile: "test" }).file;
+    expect(con.length).toBe(sin.length);
+    const publicoCon = vaultFileInfo(con);
+    const publicoSin = vaultFileInfo(sin);
+    expect(publicoCon.slotCount).toBe(publicoSin.slotCount);
+    expect(publicoCon.slotSize).toBe(publicoSin.slotSize);
+    expect(publicoCon.argon2).toEqual(publicoSin.argon2);
+  });
+
+  it("vincular una llave a una bóveda existente conserva las entradas", () => {
+    const { file } = createVault(clave(), {
+      argon2Profile: "test",
+      items: [{ type: "login", title: "Netflix", secret: "s3cr3to" }],
+    });
+    const abierta = unlockVault(file, clave());
+    const vinculado = abierta.rebind(clave(), null, FACTOR);
+    abierta.lock();
+
+    expect(() => unlockVault(vinculado, clave())).toThrow(VaultUnlockError);
+    const conLlave = unlockVault(vinculado, clave(), { hardwareFactor: FACTOR });
+    const item = conLlave.get(conLlave.list()[0]!.id);
+    expect(item?.secret).toBe("s3cr3to");
+    conLlave.lock();
+  });
+
+  it("desvincular la llave devuelve la bóveda a contraseña sola", () => {
+    const { file } = createVault(clave(), { argon2Profile: "test", hardwareFactor: FACTOR });
+    const abierta = unlockVault(file, clave(), { hardwareFactor: FACTOR });
+    const suelto = abierta.rebind(clave(), FACTOR, null);
+    abierta.lock();
+    const sinLlave = unlockVault(suelto, clave());
+    expect(sinLlave.size).toBe(0);
+    sinLlave.lock();
+  });
+
+  it("rebind con la contraseña equivocada no toca nada, en vez de dejarte fuera", () => {
+    const { file } = createVault(clave(), {
+      argon2Profile: "test",
+      items: [{ type: "login", title: "Netflix", secret: "s3cr3to" }],
+    });
+    const abierta = unlockVault(file, clave());
+    expect(() => abierta.rebind(SecretBuffer.fromText("me equivoqué"), null, FACTOR)).toThrow(
+      /no se ha cambiado nada/,
+    );
+    // La bóveda sigue abriéndose como antes: el fallo no dejó rastro.
+    const intacto = abierta.serialize();
+    abierta.lock();
+    const despues = unlockVault(intacto, clave());
+    expect(despues.list()).toHaveLength(1);
+    despues.lock();
+  });
+
+  it("rebind con el factor actual equivocado tampoco toca nada", () => {
+    const { file } = createVault(clave(), { argon2Profile: "test", hardwareFactor: FACTOR });
+    const abierta = unlockVault(file, clave(), { hardwareFactor: FACTOR });
+    expect(() => abierta.rebind(clave(), OTRO, null)).toThrow(/no se ha cambiado nada/);
+    abierta.lock();
+  });
+
+  it("vincular una llave deja las demás ranuras byte a byte idénticas", () => {
+    const otraClave = SecretBuffer.fromText("la segunda bóveda del fichero");
+    const { file } = createVault(clave(), { argon2Profile: "test" });
+    const conDos = addVaultSlot(file, {
+      existingPassword: clave(),
+      newPassword: otraClave.clone(),
+      items: [{ type: "note", title: "coartada" }],
+    });
+
+    const primera = unlockVault(conDos, clave());
+    const ranuraDeLaOtra = unlockVault(conDos, otraClave.clone()).slot;
+    const antes = trozoDeRanura(conDos, ranuraDeLaOtra);
+    const vinculado = primera.rebind(clave(), null, FACTOR);
+    primera.lock();
+
+    expect(trozoDeRanura(vinculado, ranuraDeLaOtra)).toEqual(antes);
+    // Y la otra bóveda sigue abriéndose con su contraseña, sin llave.
+    const otra = unlockVault(vinculado, otraClave.clone());
+    expect(otra.list()).toHaveLength(1);
+    otra.lock();
   });
 });

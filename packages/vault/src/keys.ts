@@ -2,6 +2,7 @@ import {
   ByteReader,
   KDF_LABELS,
   SecretBuffer,
+  bindHardwareFactor,
   concatBytes,
   deriveBytes,
   deriveKey,
@@ -104,13 +105,39 @@ export function deriveItemKey(
  * sincronización: usa la sal y los parámetros públicos del fichero, y devuelve
  * algo que no abre ninguna ranura.
  */
-export function deriveFileAuthKey(file: Uint8Array, password: SecretBuffer): SecretBuffer {
+export function deriveFileAuthKey(
+  file: Uint8Array,
+  password: SecretBuffer,
+  hardwareFactor?: Uint8Array | null,
+): SecretBuffer {
   const { info } = parseVaultFile(file);
-  const masterKey = deriveMasterKey(password, info.salt, info.argon2);
+  const masterKey = deriveVaultMasterKey(password, info.salt, info.argon2, hardwareFactor);
   try {
     return deriveAuthKey(masterKey);
   } finally {
     masterKey.destroy();
+  }
+}
+
+/**
+ * Clave maestra efectiva de un fichero: Argon2 y, si lo hay, el factor físico.
+ *
+ * Se concentra aquí para que ninguna ruta pueda derivar la clave de una ranura
+ * olvidándose del factor. La clave intermedia —la que sale de Argon2 sin
+ * mezclar— se destruye antes de devolver: solo debe existir la efectiva.
+ */
+export function deriveVaultMasterKey(
+  password: SecretBuffer,
+  salt: Uint8Array,
+  profile: Parameters<typeof deriveMasterKey>[2],
+  hardwareFactor?: Uint8Array | null,
+): SecretBuffer {
+  const bruta = deriveMasterKey(password, salt, profile);
+  if (!hardwareFactor) return bruta;
+  try {
+    return bindHardwareFactor(bruta, hardwareFactor);
+  } finally {
+    bruta.destroy();
   }
 }
 

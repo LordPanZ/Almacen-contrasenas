@@ -192,8 +192,13 @@ export interface Herencia {
 export const nucleo = {
   crear: (password: string, perfil: string, ranuras: number) =>
     llamar<{ resumen: ResumenBoveda; fichero: Uint8Array }>("crear", { password, perfil, ranuras }),
-  abrir: (fichero: Uint8Array, password: string) =>
-    llamar<{ resumen: ResumenBoveda }>("abrir", { fichero, password }),
+  abrir: (fichero: Uint8Array, password: string, factor?: Uint8Array | null) =>
+    llamar<{ resumen: ResumenBoveda }>("abrir", { fichero, password, factor: factor ?? null }),
+  salLlave: (fichero?: Uint8Array | null) =>
+    llamar<{ sal: Uint8Array }>("salLlave", { fichero: fichero ?? null }),
+  estadoLlave: () => llamar<{ vinculada: boolean }>("estadoLlave"),
+  vincularLlave: (password: string, factor: Uint8Array | null) =>
+    llamar<{ fichero: Uint8Array; vinculada: boolean }>("vincularLlave", { password, factor }),
   inspeccionar: (fichero: Uint8Array) => llamar<InfoFichero>("inspeccionar", { fichero }),
   listar: () => llamar<{ filas: FilaEntrada[] }>("listar"),
   obtener: (id: string) => llamar<DetalleEntrada>("obtener", { id }),

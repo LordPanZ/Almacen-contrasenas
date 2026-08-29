@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+import { LlaveError, obtenerFactor, soportaLlave, textoAFactor } from "./llave.ts";
 import { nucleo, type InfoFichero, type ResumenBoveda } from "./nucleo.ts";
 
 interface Props {
   readonly ficheroGuardado: Uint8Array | null;
-  readonly alAbrir: (resumen: ResumenBoveda, fichero: Uint8Array, password: string) => void;
+  readonly alAbrir: (
+    resumen: ResumenBoveda,
+    fichero: Uint8Array,
+    password: string,
+    factor?: Uint8Array | null,
+  ) => void;
 }
 
 type Modo = "abrir" | "crear";
@@ -26,6 +32,12 @@ export function Portada({ ficheroGuardado, alAbrir }: Props) {
   const [fuerza, setFuerza] = useState<{ bits: number; veredicto: string; avisos: readonly string[] } | null>(null);
   const [trabajando, setTrabajando] = useState(false);
   const [fallo, setFallo] = useState<string | null>(null);
+  // Solo aparece cuando la contraseña sola no ha abierto nada: el formulario no
+  // pregunta de entrada por la llave porque el fichero no dice si la lleva, y
+  // preguntarlo siempre delataría a quien no la usa.
+  const [ofrecerLlave, setOfrecerLlave] = useState(false);
+  const [codigo, setCodigo] = useState("");
+  const [usarCodigo, setUsarCodigo] = useState(false);
   const entradaFichero = useRef<HTMLInputElement>(null);
 
   /**
@@ -111,7 +123,33 @@ export function Portada({ ficheroGuardado, alAbrir }: Props) {
         alAbrir(resumen, fichero as Uint8Array, password);
       }
     } catch (error) {
-      setFallo(error instanceof Error ? error.message : String(error));
+      const mensaje = error instanceof Error ? error.message : String(error);
+      // Que no abra puede significar contraseña incorrecta o que falte la
+      // llave, y el fichero no permite distinguirlo: se ofrecen las dos vías.
+      if (modo === "abrir" && soportaLlave()) setOfrecerLlave(true);
+      setFallo(mensaje);
+      setTrabajando(false);
+    }
+  }
+
+  /** Segundo intento, mezclando el factor de la llave o del código apuntado. */
+  async function abrirConFactor(origen: "llave" | "codigo") {
+    if (!fichero) return;
+    setTrabajando(true);
+    setFallo(null);
+    try {
+      const { sal } = await nucleo.salLlave(fichero);
+      const factor = origen === "llave" ? await obtenerFactor(sal) : textoAFactor(codigo);
+      const { resumen } = await nucleo.abrir(fichero, password, factor);
+      alAbrir(resumen, fichero, password, factor);
+    } catch (error) {
+      const mensaje =
+        error instanceof LlaveError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      setFallo(mensaje);
       setTrabajando(false);
     }
   }
@@ -304,6 +342,59 @@ export function Portada({ ficheroGuardado, alAbrir }: Props) {
               <div className="aviso alarma">
                 <span className="glifo">!</span>
                 <span>{fallo}</span>
+              </div>
+            )}
+
+            {ofrecerLlave && modo === "abrir" && (
+              <div className="aviso senal" style={{ display: "block" }}>
+                <p style={{ marginBottom: 12 }}>
+                  <strong>¿Esta bóveda usa una llave de seguridad?</strong> Si la vinculaste, la
+                  contraseña sola no la abre: hace falta además la llave de este dispositivo.
+                </p>
+                {usarCodigo ? (
+                  <label className="campo" style={{ marginBottom: 10 }}>
+                    <span className="etiqueta">Código de recuperación</span>
+                    <input
+                      type="text"
+                      value={codigo}
+                      onChange={(e) => setCodigo(e.target.value)}
+                      placeholder="seis grupos separados por espacios"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                  </label>
+                ) : null}
+                <div className="barra-acciones">
+                  {usarCodigo ? (
+                    <>
+                      <button
+                        type="button"
+                        className="boton principal"
+                        disabled={codigo.trim() === ""}
+                        onClick={() => void abrirConFactor("codigo")}
+                      >
+                        Abrir con el código
+                      </button>
+                      <button type="button" className="boton" onClick={() => setUsarCodigo(false)}>
+                        Usar la llave
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="boton principal"
+                        onClick={() => void abrirConFactor("llave")}
+                      >
+                        Desbloquear con la llave
+                      </button>
+                      <button type="button" className="boton" onClick={() => setUsarCodigo(true)}>
+                        Perdí la llave
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             )}
 

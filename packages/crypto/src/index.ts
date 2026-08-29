@@ -51,12 +51,15 @@ export type { Encapsulation, HybridKeyPair } from "./hybrid.ts";
 
 export {
   ARGON2_PROFILES,
+  HARDWARE_FACTOR_LENGTH,
   KDF_LABELS,
   MASTER_KEY_LENGTH,
   SALT_LENGTH,
   deriveBytes,
   deriveKey,
   deriveMasterKey,
+  bindHardwareFactor,
+  webauthnPrfSalt,
   generateSalt,
   resolveProfile,
 } from "./kdf.ts";

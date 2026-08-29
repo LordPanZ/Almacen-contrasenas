@@ -13,7 +13,9 @@ import {
   constantTimeEqual,
   decodeShare,
   deriveKey,
+  bindHardwareFactor,
   deriveMasterKey,
+  webauthnPrfSalt,
   domainHash,
   encodeShare,
   fromBase64Url,
@@ -393,5 +395,52 @@ describe("utilidades de hash", () => {
     expect(ab_c).not.toEqual(a_bc);
     // Dominios distintos, hashes distintos, con la misma entrada.
     expect(domainHash("uno", utf8Encode("x"))).not.toEqual(domainHash("dos", utf8Encode("x")));
+  });
+});
+
+describe("factor de hardware", () => {
+  const salt = generateSalt();
+
+  it("la clave con factor no coincide con la de sin factor", () => {
+    const mk = deriveMasterKey(SecretBuffer.fromText("correcto caballo grapa"), salt, "test");
+    const conFactor = bindHardwareFactor(mk, new Uint8Array(32).fill(7));
+    expect(toHex(conFactor.bytes)).not.toBe(toHex(mk.bytes));
+  });
+
+  it("el mismo factor da siempre la misma clave", () => {
+    const mk = deriveMasterKey(SecretBuffer.fromText("correcto caballo grapa"), salt, "test");
+    const factor = randomBytes(32);
+    const a = bindHardwareFactor(mk, factor);
+    const b = bindHardwareFactor(mk, factor);
+    expect(toHex(a.bytes)).toBe(toHex(b.bytes));
+  });
+
+  it("dos factores distintos dan claves distintas", () => {
+    const mk = deriveMasterKey(SecretBuffer.fromText("correcto caballo grapa"), salt, "test");
+    const a = bindHardwareFactor(mk, randomBytes(32));
+    const b = bindHardwareFactor(mk, randomBytes(32));
+    expect(toHex(a.bytes)).not.toBe(toHex(b.bytes));
+  });
+
+  it("rechaza un factor demasiado corto para aportar entropía", () => {
+    const mk = deriveMasterKey(SecretBuffer.fromText("x"), salt, "test");
+    expect(() => bindHardwareFactor(mk, randomBytes(8))).toThrow(/al menos 16 bytes/);
+  });
+
+  it("la sal del PRF es distinta en cada fichero y estable en el mismo", () => {
+    const unaSal = generateSalt();
+    const otraSal = generateSalt();
+    expect(toHex(webauthnPrfSalt(unaSal))).toBe(toHex(webauthnPrfSalt(unaSal)));
+    expect(toHex(webauthnPrfSalt(unaSal))).not.toBe(toHex(webauthnPrfSalt(otraSal)));
+  });
+
+  it("del resultado no se recupera el factor ni la clave maestra", () => {
+    // HKDF es de un solo sentido: la comprobación posible es que la salida no
+    // contenga literalmente ninguna de sus dos entradas.
+    const mk = deriveMasterKey(SecretBuffer.fromText("correcto caballo grapa"), salt, "test");
+    const factor = randomBytes(32);
+    const salida = toHex(bindHardwareFactor(mk, factor).bytes);
+    expect(salida).not.toContain(toHex(factor));
+    expect(salida).not.toContain(toHex(mk.bytes));
   });
 });

@@ -10,6 +10,7 @@ import {
   resolveProfile,
   seal as aeadSeal,
   SecretBuffer,
+  constantTimeEqual,
   tryOpen,
   utf8Decode,
   utf8Encode,
@@ -48,6 +49,7 @@ import {
   createEnvelope,
   decodeEnvelope,
   deriveSlotKey,
+  deriveVaultMasterKey,
   destroyEnvelope,
   encodeEnvelope,
   ENVELOPE_LENGTH,
@@ -99,6 +101,15 @@ export interface CreateVaultOptions {
   readonly slotCount?: number;
   readonly slotSize?: number;
   readonly items?: readonly VaultItemDraft[];
+  /**
+   * Factor físico que se mezcla con la clave maestra.
+   *
+   * Con él, la contraseña por sí sola deja de abrir el fichero. No se guarda en
+   * ninguna parte —ni siquiera un indicio de que exista—, así que el fichero
+   * sigue sin delatar nada: quien lo robe no puede saber si le falta algo más
+   * que la contraseña.
+   */
+  readonly hardwareFactor?: Uint8Array | null;
 }
 
 export interface AddVaultSlotOptions {
@@ -117,6 +128,10 @@ export interface AddVaultSlotOptions {
    */
   readonly otherPasswords?: readonly SecretBuffer[];
   readonly items?: readonly VaultItemDraft[];
+  /** Factor de la bóveda actual, necesario para localizar su ranura. */
+  readonly hardwareFactor?: Uint8Array | null;
+  /** Factor de la bóveda nueva. Puede ser distinto, o ninguno. */
+  readonly newHardwareFactor?: Uint8Array | null;
 }
 
 /**
@@ -345,6 +360,64 @@ export class UnlockedVault {
     return Uint8Array.from(this.#file);
   }
 
+  /**
+   * Cambia el factor físico de esta bóveda y devuelve el fichero resellado.
+   *
+   * Vincular o desvincular una llave no toca las entradas: solo cambia la clave
+   * con la que se sella **esta** ranura. Las demás quedan byte a byte idénticas,
+   * igual que en cualquier otro guardado, así que vincular una llave no delata
+   * cuántas bóvedas hay en el fichero.
+   *
+   * Antes de sustituir nada se comprueba que la contraseña y el factor actuales
+   * reproducen la clave con la que la ranura está sellada ahora mismo. Sin esa
+   * comprobación, un error al teclear resellaría la ranura bajo una clave que
+   * nadie conoce y la bóveda quedaría perdida en silencio: el peor fallo
+   * posible en una operación que existe justo para aumentar la seguridad.
+   */
+  rebind(
+    password: SecretBuffer,
+    factorActual: Uint8Array | null,
+    factorNuevo: Uint8Array | null,
+  ): Uint8Array {
+    this.#assertOpen();
+    const maestraActual = deriveVaultMasterKey(
+      password,
+      this.#info.salt,
+      this.#info.argon2,
+      factorActual,
+    );
+    let comprobacion: SecretBuffer;
+    try {
+      comprobacion = deriveSlotKey(maestraActual, this.#slot);
+    } finally {
+      maestraActual.destroy();
+    }
+    try {
+      if (!constantTimeEqual(comprobacion.bytes, this.#slotKey.bytes)) {
+        throw new VaultError(
+          "la contraseña o la llave actuales no son las que abren esta bóveda: no se ha cambiado nada",
+        );
+      }
+    } finally {
+      comprobacion.destroy();
+    }
+
+    const maestraNueva = deriveVaultMasterKey(
+      password,
+      this.#info.salt,
+      this.#info.argon2,
+      factorNuevo,
+    );
+    try {
+      const anterior = this.#slotKey;
+      this.#slotKey = deriveSlotKey(maestraNueva, this.#slot);
+      anterior.destroy();
+    } finally {
+      maestraNueva.destroy();
+    }
+    return this.serialize();
+  }
+
   /** Borra de memoria el sobre, la clave de ranura y los ítems descifrados. */
   lock(): void {
     if (this.#envelope) {
@@ -523,9 +596,15 @@ function writeVaultIntoSlot(
   password: SecretBuffer,
   slot: number,
   drafts: readonly VaultItemDraft[],
+  hardwareFactor?: Uint8Array | null,
 ): { file: Uint8Array; vault: UnlockedVault } {
   const parsed = parseVaultFile(file);
-  const masterKey = deriveMasterKey(password, parsed.info.salt, parsed.info.argon2);
+  const masterKey = deriveVaultMasterKey(
+    password,
+    parsed.info.salt,
+    parsed.info.argon2,
+    hardwareFactor,
+  );
   let slotKey: SecretBuffer;
   try {
     slotKey = deriveSlotKey(masterKey, slot);
@@ -577,6 +656,7 @@ export function createVault(
     password,
     randomInt(slotCount),
     options.items ?? [],
+    options.hardwareFactor,
   );
 }
 
@@ -593,9 +673,18 @@ export function createVault(
  * mismo error: cualquier diferencia convertiría el desbloqueo en un oráculo con
  * el que contar bóvedas.
  */
-export function unlockVault(file: Uint8Array, password: SecretBuffer): UnlockedVault {
+export function unlockVault(
+  file: Uint8Array,
+  password: SecretBuffer,
+  options: { readonly hardwareFactor?: Uint8Array | null } = {},
+): UnlockedVault {
   const parsed = parseVaultFile(file);
-  const masterKey = deriveMasterKey(password, parsed.info.salt, parsed.info.argon2);
+  const masterKey = deriveVaultMasterKey(
+    password,
+    parsed.info.salt,
+    parsed.info.argon2,
+    options.hardwareFactor,
+  );
 
   try {
     for (let slot = 0; slot < parsed.info.slotCount; slot++) {
@@ -641,7 +730,7 @@ export function addVaultSlot(file: Uint8Array, options: AddVaultSlotOptions): Ui
   // Las demás son indistinguibles del ruido, y así debe seguir siendo.
   const ocupadas = new Set<number>();
   for (const clave of [options.existingPassword, ...(options.otherPasswords ?? [])]) {
-    const abierta = unlockVault(file, clave);
+    const abierta = unlockVault(file, clave, { hardwareFactor: options.hardwareFactor ?? null });
     ocupadas.add(abierta.slot);
     abierta.lock();
   }
@@ -649,7 +738,9 @@ export function addVaultSlot(file: Uint8Array, options: AddVaultSlotOptions): Ui
   // Reutilizar una contraseña dejaría dos bóvedas indistinguibles para su
   // dueño: la primera que abriera ganaría y la otra sería inalcanzable.
   try {
-    const previa = unlockVault(file, options.newPassword);
+    const previa = unlockVault(file, options.newPassword, {
+      hardwareFactor: options.newHardwareFactor ?? null,
+    });
     previa.lock();
     throw new VaultError("esa contraseña ya abre una bóveda de este fichero");
   } catch (fallo) {
@@ -671,6 +762,7 @@ export function addVaultSlot(file: Uint8Array, options: AddVaultSlotOptions): Ui
     options.newPassword,
     destino,
     options.items ?? [],
+    options.newHardwareFactor,
   );
   vault.lock();
   return actualizado;

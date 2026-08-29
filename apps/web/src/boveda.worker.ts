@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import {
   SecretBuffer,
+  webauthnPrfSalt,
   fromBase64Url,
   hybridFingerprint,
   toBase64Url,
@@ -68,6 +69,8 @@ import {
 let boveda: UnlockedVault | null = null;
 let registro: AuditLedger | null = null;
 let ficheroActual: Uint8Array | null = null;
+/** Factor con el que se abrió la bóveda; null si va solo con contraseña. */
+let factorActual: Uint8Array | null = null;
 
 interface Resumen {
   readonly vaultId: string;
@@ -358,11 +361,19 @@ function exigirDias(valor: number, que: string): number {
 const operaciones: Record<string, (carga: never) => unknown> = {
   crear: ({ password, perfil, ranuras }: { password: string; perfil: string; ranuras: number }) => {
     const clave = SecretBuffer.fromText(password);
-    const { file, vault } = createVault(clave, {
-      argon2Profile: perfil as "interactive" | "moderate" | "paranoid",
-      slotCount: ranuras,
-    });
-    clave.destroy();
+    // El borrado va en `finally`: si `createVault` lanza —parámetros fuera de
+    // rango, memoria insuficiente— la contraseña se quedaría en el montón.
+    let file: Uint8Array;
+    let vault: ReturnType<typeof createVault>["vault"];
+    try {
+      ({ file, vault } = createVault(clave, {
+        argon2Profile: perfil as "interactive" | "moderate" | "paranoid",
+        slotCount: ranuras,
+      }));
+    } finally {
+      clave.destroy();
+    }
+    factorActual = null;
     boveda = vault;
     cargarRegistro(vault);
     anotar("vault-created");
@@ -370,13 +381,24 @@ const operaciones: Record<string, (carga: never) => unknown> = {
     return { resumen: resumen(), fichero: ficheroActual };
   },
 
-  abrir: ({ fichero, password }: { fichero: Uint8Array; password: string }) => {
+  abrir: ({
+    fichero,
+    password,
+    factor,
+  }: {
+    fichero: Uint8Array;
+    password: string;
+    factor?: Uint8Array | null;
+  }) => {
     const clave = SecretBuffer.fromText(password);
     try {
-      boveda = unlockVault(fichero, clave);
+      boveda = unlockVault(fichero, clave, { hardwareFactor: factor ?? null });
     } finally {
       clave.destroy();
     }
+    // Se recuerda para poder resellar al vincular o desvincular sin volver a
+    // pedirla: la ranura ya está abierta, así que no aporta nada olvidarla aquí.
+    factorActual = factor ? Uint8Array.from(factor) : null;
     ficheroActual = fichero;
     cargarRegistro(boveda);
     anotar("vault-unlocked");
@@ -847,8 +869,45 @@ const operaciones: Record<string, (carga: never) => unknown> = {
     }
   },
 
+  /**
+   * Sal que hay que pedirle al autenticador para esta bóveda concreta.
+   *
+   * Acepta el fichero por parámetro porque hace falta **antes** de abrir nada:
+   * en la pantalla de desbloqueo el trabajador todavía no tiene bóveda cargada,
+   * y es justo ahí donde se necesita la sal para pedirle el factor a la llave.
+   */
+  salLlave: ({ fichero }: { fichero?: Uint8Array | null } = {}) => {
+    const bytes = fichero ?? ficheroActual;
+    if (!bytes) throw new Error("hace falta un fichero para calcular la sal de la llave");
+    return { sal: webauthnPrfSalt(vaultFileInfo(bytes).salt) };
+  },
+
+  /** ¿Está esta bóveda vinculada a una llave en la sesión actual? */
+  estadoLlave: () => ({ vinculada: factorActual !== null }),
+
+  /**
+   * Vincula o desvincula la llave resellando la ranura.
+   *
+   * `rebind` comprueba antes que la contraseña y el factor actuales son los que
+   * abren la ranura, así que un error aquí no puede dejar la bóveda inaccesible.
+   */
+  vincularLlave: ({ password, factor }: { password: string; factor: Uint8Array | null }) => {
+    const v = exigirAbierta();
+    const clave = SecretBuffer.fromText(password);
+    try {
+      ficheroActual = v.rebind(clave, factorActual, factor);
+    } finally {
+      clave.destroy();
+    }
+    factorActual = factor ? Uint8Array.from(factor) : null;
+    anotar("policy-changed", factor ? "llave-vinculada" : "llave-desvinculada");
+    return { fichero: ficheroActual, vinculada: factorActual !== null };
+  },
+
   cerrar: () => {
     boveda?.lock();
+    if (factorActual) factorActual.fill(0);
+    factorActual = null;
     boveda = null;
     registro = null;
     ficheroActual = null;

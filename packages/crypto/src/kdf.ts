@@ -102,6 +102,8 @@ export const KDF_LABELS = {
   timeLock: "time-lock-key",
   canaryTag: "canary-tag-key",
   breachRequest: "breach-request-key",
+  hardwareFactor: "hardware-factor",
+  webauthnSalt: "webauthn-prf-salt",
 } as const;
 
 export type KdfLabel = (typeof KDF_LABELS)[keyof typeof KDF_LABELS] | (string & {});
@@ -138,4 +140,46 @@ export function deriveBytes(
   const copy = Uint8Array.from(secret.bytes);
   secret.destroy();
   return copy;
+}
+
+/** Bytes del factor hardware. Es lo que devuelve el PRF de WebAuthn. */
+export const HARDWARE_FACTOR_LENGTH = 32;
+
+/**
+ * Mezcla un factor de hardware en la clave maestra.
+ *
+ * El resultado sustituye a la clave maestra para todo lo que venga después, de
+ * modo que sin el factor **no se llega a ninguna clave de ranura**: un fichero
+ * robado no se abre ni conociendo la contraseña. HKDF es de un solo sentido, así
+ * que de la clave resultante tampoco se recupera el factor.
+ *
+ * El factor entra como `context` y no como `salt` a propósito: el material de
+ * entrada sigue siendo la clave maestra, que es donde vive la entropía de la
+ * contraseña, y el factor solo separa dominios. Si entrara como IKM, un factor
+ * de baja entropía degradaría el resultado.
+ */
+export function bindHardwareFactor(
+  masterKey: SecretBuffer | Uint8Array,
+  factor: Uint8Array,
+): SecretBuffer {
+  if (factor.length < 16) {
+    throw new InvalidInputError("el factor de hardware debe tener al menos 16 bytes");
+  }
+  const ikm = masterKey instanceof Uint8Array ? masterKey : masterKey.bytes;
+  return deriveKey(ikm, KDF_LABELS.hardwareFactor, { context: factor });
+}
+
+/**
+ * Sal que se le pide evaluar al autenticador, derivada de la del fichero.
+ *
+ * Va atada al fichero para que la misma llave física produzca un factor
+ * distinto en cada bóveda: si fuera una constante, quien obtuviera el factor de
+ * una bóveda lo tendría para todas las demás protegidas con la misma llave.
+ *
+ * Es un valor público —la sal del fichero también lo es— y no hace falta
+ * guardarlo: se recalcula al abrir, así que el formato del fichero no cambia y
+ * nada en él delata que haya una llave de por medio.
+ */
+export function webauthnPrfSalt(fileSalt: Uint8Array): Uint8Array {
+  return deriveBytes(fileSalt, KDF_LABELS.webauthnSalt, { length: 32 });
 }

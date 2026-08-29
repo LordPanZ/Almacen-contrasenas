@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { VistaGuardianes } from "./Guardianes.tsx";
+import { VistaLlave } from "./Llave.tsx";
 import { Portada } from "./Portada.tsx";
 import {
   VistaAuditoria,
@@ -26,6 +27,7 @@ type Vista =
   | "canarios"
   | "filtraciones"
   | "coaccion"
+  | "llave"
   | "guardianes"
   | "auditoria"
   | "fichero";
@@ -35,6 +37,7 @@ const NAV: readonly { vista: Vista; nombre: string; glifo: string; grupo?: strin
   { vista: "generador", nombre: "Generador", glifo: "⚂" },
   { vista: "canarios", nombre: "Trampas", glifo: "◈", grupo: "Protección" },
   { vista: "coaccion", nombre: "Coacción", glifo: "◫" },
+  { vista: "llave", nombre: "Llave", glifo: "⚿" },
   { vista: "guardianes", nombre: "Guardianes", glifo: "◎" },
   { vista: "filtraciones", nombre: "Filtraciones", glifo: "◉" },
   { vista: "auditoria", nombre: "Auditoría", glifo: "⌘", grupo: "Verificación" },
@@ -79,12 +82,18 @@ export function App() {
 
   async function cerrar() {
     await nucleo.cerrar();
+    // Se lee el fichero guardado *antes* de desmontar la bóveda. La portada
+    // decide en qué modo arranca al montarse, así que si todavía no sabe que
+    // hay una bóveda en este navegador se abre en «crear una nueva» y el
+    // usuario, tras bloquear, se encuentra pidiéndole una contraseña nueva en
+    // vez de la suya.
+    const encontrado = await leerLocal();
+    setGuardado(encontrado);
     setResumen(null);
     setFichero(null);
     setPassword("");
     setFilas([]);
     setVista("entradas");
-    setGuardado(await leerLocal());
   }
 
   if (cargando) {
@@ -156,6 +165,15 @@ export function App() {
           )}
           {vista === "coaccion" && (
             <VistaCoaccion
+              passwordActual={password}
+              alActualizarFichero={(b) => {
+                setFichero(b);
+                void guardarLocal(b).then(setAlmacenDisponible);
+              }}
+            />
+          )}
+          {vista === "llave" && (
+            <VistaLlave
               passwordActual={password}
               alActualizarFichero={(b) => {
                 setFichero(b);
