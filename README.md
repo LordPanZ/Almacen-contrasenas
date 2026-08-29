@@ -21,6 +21,7 @@ secretos en reposo y sincronizarlos. Cerbero ataca los huecos que quedan.
 | Alguien entra en tu bóveda y no te enteras | Credenciales trampa indistinguibles de las reales | No |
 | El servidor ve tus dominios, títulos y cuántos ítems tienes | Metadatos dentro del cifrado y relleno por cubos | Parcial |
 | Comprobar si tu contraseña está filtrada se la revela a alguien | OPRF verificable: el servidor no aprende ni un prefijo | No |
+| Caes en una página que imita a tu banco | La extensión exige coincidencia exacta de origen, y **explica** por qué se niega | Parcial |
 
 ## Empezar
 
@@ -29,9 +30,20 @@ pnpm install
 pnpm test                          # 175 tests
 pnpm build
 
-pnpm --filter @cerbero/web dev     # la app, en el navegador
+pnpm --filter @cerbero/web dev        # la app, en el navegador
+pnpm --filter @cerbero/extension build  # extensión → cargar apps/extension/dist
 node --experimental-strip-types apps/cli/src/main.ts --help
 ```
+
+### La extensión
+
+Una extensión de gestor de contraseñas no vale por ahorrarte teclear: vale por
+**negarse a escribir donde no debe**. Exige que el nombre de host coincida
+exactamente, nunca rellena dentro de un marco de otro origen, repite la
+comprobación en el momento de rellenar —no solo al listar— y, cuando se niega,
+dice por qué. Detecta además dominios que cuelgan el tuyo como prefijo
+(`banco.es.atacante.com`) y homógrafos (`xn--banc-85d.es`, que se lee «bancó.es»
+con una «о» cirílica). Detalles en [apps/extension](apps/extension/README.md).
 
 ### La línea de comandos
 
@@ -55,6 +67,7 @@ packages/guardians   Recuperación social, cerradura temporal, hombre muerto
 packages/sentinel    Credenciales trampa y filtraciones con conocimiento cero
 apps/cli             Línea de comandos
 apps/web             Interfaz gráfica, entera en el navegador
+apps/extension       Extensión de navegador con relleno vinculado al origen
 ```
 
 Las dependencias van en un solo sentido: todos apuntan a `crypto` y ninguno se
