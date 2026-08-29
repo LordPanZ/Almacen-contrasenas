@@ -129,6 +129,20 @@ textarea {
   height: 100%;
 }
 
+/*
+ * Sin esto la columna `1fr` no vale 1fr.
+ *
+ * El mínimo automático de un elemento de grid es su tamaño de contenido
+ * mínimo, así que cualquier descendiente ancho —una tabla, una tira que no
+ * parte— ensancha la columna entera y arrastra con ella toda la página. En un
+ * teléfono el efecto es que la app se dibuja a ancho de escritorio y se sale
+ * por la derecha, con los controles del extremo fuera de la pantalla.
+ */
+.rail,
+.lienzo {
+  min-width: 0;
+}
+
 .rail {
   border-right: 1px solid var(--linea);
   background: var(--fondo-hueco);
@@ -219,6 +233,11 @@ textarea {
   padding: 16px 22px 0;
   border-top: 1px solid var(--linea);
   margin-top: 12px;
+}
+
+.pie-cuenta {
+  display: block;
+  margin-bottom: 10px;
 }
 
 .lienzo {
@@ -662,27 +681,498 @@ input::placeholder {
   line-height: 1.7;
 }
 
+/* ─── Buscador ────────────────────────────────────────────────────────── */
+
+.buscador {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.buscador-caja {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: var(--fondo-hueco);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.buscador-caja:focus-within {
+  border-color: var(--linea-viva);
+  box-shadow: 0 0 0 3px rgba(232, 163, 61, 0.09);
+}
+
+.buscador-glifo {
+  font-family: var(--mono);
+  color: var(--texto-tenue);
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* El campo pierde su marco: el marco ahora es la caja que lo envuelve. */
+.buscador-caja input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 10px 0;
+  box-shadow: none;
+}
+
+.buscador-caja input[type="search"]:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.buscador-caja input[type="search"]::-webkit-search-cancel-button {
+  display: none;
+}
+
+.buscador-limpiar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: var(--fondo-panel-alto);
+  border: 1px solid var(--linea);
+  border-radius: 50%;
+  color: var(--texto-medio);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.buscador-limpiar:hover {
+  color: var(--texto);
+  border-color: var(--linea-viva);
+}
+
+/* ─── Chips de categoría ──────────────────────────────────────────────── */
+
+.chips {
+  display: flex;
+  gap: 7px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Sangrado hacia los bordes del lienzo: en un móvil la tira debe poder
+     desplazarse de borde a borde, no quedarse encajonada con aire a los lados. */
+  padding: 2px 2px 6px;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  background: var(--fondo-panel);
+  border: 1px solid var(--linea);
+  border-radius: 100px;
+  color: var(--texto-medio);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.chip:hover {
+  color: var(--texto);
+  border-color: var(--linea-viva);
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--senal-tenue);
+  border-color: rgba(232, 163, 61, 0.38);
+  color: var(--senal);
+}
+
+.chip-cuenta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--texto-tenue);
+}
+
+.chip[aria-pressed="true"] .chip-cuenta {
+  color: inherit;
+  opacity: 0.75;
+}
+
+.recuento {
+  display: block;
+  margin-bottom: 8px;
+}
+
+/* ─── Lista de entradas ───────────────────────────────────────────────── */
+
+.lista-entradas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.entrada-bloque {
+  background: var(--fondo-panel);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  overflow: hidden;
+}
+
+/*
+ * La fila entera es el botón, no un enlace con zonas muertas alrededor: en un
+ * móvil el objetivo táctil es todo el ancho y no hay que apuntar al título.
+ */
+.entrada {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  min-height: 58px;
+  padding: 11px 15px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--texto);
+  transition: background 120ms ease;
+}
+
+.entrada:hover {
+  background: var(--fondo-panel-alto);
+}
+
+.entrada[aria-expanded="true"] {
+  background: var(--fondo-panel-alto);
+}
+
+.entrada-glifo {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  background: var(--fondo-hueco);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--texto-medio);
+}
+
+.entrada-cuerpo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.entrada-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entrada-sub {
+  color: var(--texto-tenue);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entrada-cola {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.entrada-flecha {
+  color: var(--texto-tenue);
+  font-size: 10px;
+}
+
+/* ─── Ficha abierta ───────────────────────────────────────────────────── */
+
+.ficha {
+  padding: 16px 15px 15px;
+  border-top: 1px solid var(--linea);
+  background: var(--fondo-hueco);
+}
+
+.ficha-pie {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--linea);
+}
+
+.copiable {
+  word-break: break-all;
+}
+
+/* ─── Formulario ──────────────────────────────────────────────────────── */
+
+.formulario {
+  margin-bottom: 14px;
+}
+
+/* Dentro de una ficha el formulario ya está enmarcado por ella. */
+.ficha + .formulario,
+.entrada-bloque > .formulario {
+  margin-bottom: 0;
+  border: none;
+  border-top: 1px solid var(--linea);
+  border-radius: 0;
+  background: var(--fondo-hueco);
+}
+
+.rejilla-campos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+
+.boton.ancho {
+  width: 100%;
+  justify-content: center;
+}
+
+.tabla-marco {
+  overflow-x: auto;
+}
+
+/* ─── Móvil ───────────────────────────────────────────────────────────── */
+
 @media (max-width: 860px) {
   .marco {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
+
+  /*
+   * El rail deja de ser una columna y se convierte en una tira superior fija.
+   * Se queda pegada al desplazar porque cambiar de sección es lo que más se
+   * hace, y bajar hasta el final de una lista larga para volver a subir a por
+   * el menú es exactamente el gesto que hace que una app se sienta de
+   * escritorio metida a la fuerza en un teléfono.
+   */
   .rail {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     border-right: none;
     border-bottom: 1px solid var(--linea);
+    padding: 0;
+    background: var(--fondo-hueco);
+    /*
+     * Marca y candado comparten fila, y las secciones ocupan la de abajo. En
+     * columna serían tres franjas fijas comiéndose la sexta parte de la
+     * pantalla en un teléfono, y esa altura la necesita la lista.
+     */
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "marca pie"
+      "nav nav";
+    align-items: center;
   }
+
+  .marca {
+    grid-area: marca;
+    padding: 11px 16px;
+  }
+
+  .nav {
+    grid-area: nav;
+  }
+
   .nav {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 4px;
+    padding: 0 12px 9px;
   }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav > div {
+    flex-shrink: 0;
+  }
+
   .nav-grupo {
     display: none;
   }
-  .lienzo {
-    padding: 24px 20px 48px;
+
+  .nav-item {
+    white-space: nowrap;
+    padding: 9px 13px;
+    border: 1px solid var(--linea);
+    border-radius: 100px;
   }
+
+  /* El piloto lateral no cabe en una píldora horizontal: la píldora se enciende. */
+  .nav-item[aria-current="true"] {
+    background: var(--senal-tenue);
+    border-color: rgba(232, 163, 61, 0.38);
+    color: var(--senal);
+  }
+
+  .nav-item[aria-current="true"]::before {
+    display: none;
+  }
+
+  /* El contador y el candado se van al final del lienzo, no a un pie invisible. */
+  .pie-rail {
+    grid-area: pie;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 0;
+    padding: 0 14px 0 0;
+    border-top: none;
+  }
+
+  .pie-rail .pie-cuenta {
+    margin-bottom: 0;
+    white-space: nowrap;
+  }
+
+  .pie-rail .boton.ancho {
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .lienzo {
+    padding: 20px 14px calc(40px + env(safe-area-inset-bottom));
+  }
+
+  .cabecera-vista h1 {
+    font-size: 23px;
+  }
+
+  .cabecera-vista {
+    margin-bottom: 18px;
+  }
+
+  .panel {
+    padding: 16px 14px;
+  }
+
   .rejilla-datos {
     grid-template-columns: 1fr;
-    gap: 4px 0;
+    gap: 3px 0;
+  }
+
+  .rejilla-datos > .etiqueta:not(:first-child) {
+    margin-top: 11px;
+  }
+
+  /* Un formulario a dos columnas en 360 px son dos columnas inservibles. */
+  .rejilla-campos {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .buscador {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 9px;
+  }
+
+  .buscador .nueva {
+    justify-content: center;
+    min-height: 46px;
+  }
+
+  /*
+   * 16 px es el umbral por debajo del cual Safari en iOS hace zoom al enfocar
+   * un campo, y del zoom no se vuelve solo: la página se queda descuadrada el
+   * resto de la sesión.
+   */
+  input[type="text"],
+  input[type="password"],
+  input[type="search"],
+  input[type="number"],
+  textarea,
+  select {
+    font-size: 16px;
+    padding: 11px 12px;
+  }
+
+  .buscador-caja input[type="search"] {
+    padding: 12px 0;
+  }
+
+  /* Objetivos táctiles: 44 px es el mínimo cómodo con el pulgar. */
+  .boton {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  .barra-acciones {
+    gap: 8px;
+  }
+
+  /* Los chips son secundarios, pero 35 px se fallan con el pulgar en marcha. */
+  .chip {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  .secreto {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 9px;
+  }
+
+  .secreto .barra-acciones .boton {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .ficha-pie .boton {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .entrada-cola .dato {
+    display: none;
+  }
+
+  .tabla {
+    min-width: 460px;
+  }
+}
+
+@media (max-width: 400px) {
+  .entrada {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .entrada-glifo {
+    width: 26px;
+    height: 26px;
   }
 }
 

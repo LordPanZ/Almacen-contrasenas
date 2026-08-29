@@ -124,10 +124,10 @@ export function App() {
         </div>
 
         <div className="pie-rail">
-          <div className="etiqueta" style={{ marginBottom: 10 }}>
+          <div className="etiqueta pie-cuenta">
             {filas.length} entrada{filas.length === 1 ? "" : "s"}
           </div>
-          <button className="boton" style={{ width: "100%", justifyContent: "center" }} onClick={() => void cerrar()}>
+          <button className="boton ancho" onClick={() => void cerrar()}>
             Bloquear
           </button>
         </div>

@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import {
+  CATEGORIAS,
+  comoCategoria,
   formatearBytes,
   formatearFecha,
+  nombreCategoria,
   nucleo,
+  type Categoria,
   type DetalleEntrada,
   type EntradaAuditoria,
   type FilaEntrada,
@@ -36,27 +40,41 @@ export function VistaEntradas({
 }) {
   const [seleccion, setSeleccion] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<DetalleEntrada | null>(null);
-  const [revelado, setRevelado] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  const [filtro, setFiltro] = useState<Categoria | "todas">("todas");
   const [creando, setCreando] = useState(false);
+  const [editando, setEditando] = useState(false);
+
+  async function cargarDetalle(id: string) {
+    try {
+      setDetalle(await nucleo.obtener(id));
+    } catch {
+      setDetalle(null);
+    }
+  }
 
   useEffect(() => {
     if (!seleccion) {
       setDetalle(null);
       return;
     }
-    setRevelado(false);
-    void nucleo.obtener(seleccion).then(setDetalle).catch(() => setDetalle(null));
+    setEditando(false);
+    void cargarDetalle(seleccion);
   }, [seleccion]);
 
+  const aguja = busqueda.trim().toLocaleLowerCase("es");
   const visibles = filas.filter((fila) => {
-    const aguja = busqueda.trim().toLocaleLowerCase("es");
+    if (filtro !== "todas" && fila.categoria !== filtro) return false;
     if (aguja === "") return true;
-    return [fila.titulo, fila.usuario, fila.url, ...fila.etiquetas]
+    return [fila.titulo, fila.usuario, fila.url, nombreCategoria(fila.categoria), ...fila.etiquetas]
       .join(" ")
       .toLocaleLowerCase("es")
       .includes(aguja);
   });
+
+  // Solo se ofrecen los filtros que tienen algo detrás: un chip que siempre
+  // deja la lista vacía es ruido, y en un móvil ocupa una fila entera.
+  const presentes = CATEGORIAS.filter((c) => filas.some((f) => f.categoria === c.valor));
 
   async function borrar(id: string) {
     const { filas: nuevas, fichero } = await nucleo.borrar(id);
@@ -69,30 +87,71 @@ export function VistaEntradas({
       <div className="cabecera-vista">
         <h1>Entradas</h1>
         <p className="prosa">
-          Los títulos, usuarios y direcciones que ves aquí viajan <strong>dentro</strong> del
-          cifrado. Fuera del fichero solo queda un identificador aleatorio sin significado.
+          Los títulos, usuarios, direcciones y categorías que ves aquí viajan{" "}
+          <strong>dentro</strong> del cifrado. Fuera del fichero solo queda un identificador
+          aleatorio sin significado.
         </p>
       </div>
 
-      <div className="barra-acciones" style={{ marginBottom: 16 }}>
-        <input
-          type="text"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar…"
-          style={{ maxWidth: 280 }}
-        />
-        <button className="boton principal" onClick={() => setCreando(true)}>
-          Nueva entrada
+      <div className="buscador">
+        <div className="buscador-caja">
+          <span className="buscador-glifo" aria-hidden="true">
+            ⌕
+          </span>
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por nombre, usuario o web…"
+            aria-label="Buscar entradas"
+          />
+          {busqueda !== "" && (
+            <button
+              type="button"
+              className="buscador-limpiar"
+              onClick={() => setBusqueda("")}
+              aria-label="Limpiar la búsqueda"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <button className="boton principal nueva" onClick={() => setCreando(true)}>
+          + Nueva entrada
         </button>
       </div>
+
+      {presentes.length > 1 && (
+        <div className="chips" role="group" aria-label="Filtrar por categoría">
+          <button
+            className="chip"
+            aria-pressed={filtro === "todas"}
+            onClick={() => setFiltro("todas")}
+          >
+            Todas <span className="chip-cuenta">{filas.length}</span>
+          </button>
+          {presentes.map((categoria) => (
+            <button
+              key={categoria.valor}
+              className="chip"
+              aria-pressed={filtro === categoria.valor}
+              onClick={() => setFiltro(filtro === categoria.valor ? "todas" : categoria.valor)}
+            >
+              <span aria-hidden="true">{categoria.glifo}</span> {categoria.nombre}{" "}
+              <span className="chip-cuenta">
+                {filas.filter((f) => f.categoria === categoria.valor).length}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {creando && (
         <Formulario
           alCerrar={() => setCreando(false)}
-          alGuardar={(filas, fichero) => {
+          alGuardar={(nuevas, fichero) => {
             setCreando(false);
-            alCambiar(filas, fichero);
+            alCambiar(nuevas, fichero);
           }}
         />
       )}
@@ -104,159 +163,244 @@ export function VistaEntradas({
             : "Nada coincide con esa búsqueda."}
         </div>
       ) : (
-        <div className="panel" style={{ padding: "18px 22px" }}>
-          <table className="tabla">
-            <thead>
-              <tr>
-                <th style={{ width: "34%" }}>Título</th>
-                <th style={{ width: "26%" }}>Usuario</th>
-                <th style={{ width: "16%" }}>Entropía</th>
-                <th>Actualizada</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibles.map((fila) => (
-                <tr
-                  key={fila.id}
-                  aria-selected={seleccion === fila.id}
-                  onClick={() => setSeleccion(seleccion === fila.id ? null : fila.id)}
-                >
-                  <td>
-                    {fila.titulo}
-                    {fila.trampa && (
-                      <span className="distintivo senal" style={{ marginLeft: 8 }}>
-                        trampa
-                      </span>
-                    )}
-                  </td>
-                  <td className="dato" style={{ color: "var(--texto-medio)" }}>
-                    {fila.usuario || "—"}
-                  </td>
-                  <td className="dato" style={{ color: colorPorBits(fila.bits) }}>
-                    {fila.bits > 0 ? `${fila.bits} bits` : "—"}
-                  </td>
-                  <td className="dato" style={{ color: "var(--texto-tenue)" }}>
-                    {formatearFecha(fila.actualizado)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {detalle && (
-        <div className="panel aparece">
-          <div className="panel-titulo">
-            <h2 style={{ fontSize: 18 }}>{detalle.item.title}</h2>
-            <button className="boton peligro" onClick={() => void borrar(detalle.item.id)}>
-              Borrar
-            </button>
-          </div>
-
-          {detalle.trampa && (
-            <div className="aviso senal">
-              <span className="glifo">!</span>
-              <span>
-                Esta es una <strong>credencial trampa</strong>. Tú nunca la usas, así que cualquier
-                uso suyo significa que alguien ha entrado en tu bóveda.
-              </span>
+        <>
+          {(aguja !== "" || filtro !== "todas") && (
+            <div className="etiqueta recuento">
+              {visibles.length} de {filas.length}
             </div>
           )}
+          <div className="lista-entradas">
+            {visibles.map((fila) => (
+              <div key={fila.id} className="entrada-bloque">
+                <button
+                  className="entrada"
+                  aria-expanded={seleccion === fila.id}
+                  onClick={() => setSeleccion(seleccion === fila.id ? null : fila.id)}
+                >
+                  <span className="entrada-glifo" aria-hidden="true">
+                    {CATEGORIAS.find((c) => c.valor === fila.categoria)?.glifo ?? "·"}
+                  </span>
+                  <span className="entrada-cuerpo">
+                    <span className="entrada-titulo">
+                      {fila.titulo}
+                      {fila.trampa && <span className="distintivo senal">trampa</span>}
+                    </span>
+                    <span className="entrada-sub dato">
+                      {fila.usuario || fila.url || nombreCategoria(fila.categoria)}
+                    </span>
+                  </span>
+                  <span className="entrada-cola">
+                    {fila.bits > 0 && (
+                      <span className="dato" style={{ color: colorPorBits(fila.bits) }}>
+                        {fila.bits} bits
+                      </span>
+                    )}
+                    <span className="entrada-flecha" aria-hidden="true">
+                      {seleccion === fila.id ? "▴" : "▾"}
+                    </span>
+                  </span>
+                </button>
 
-          <div className="rejilla-datos">
-            <span className="etiqueta">Tipo</span>
-            <span className="dato">{detalle.item.type}</span>
-
-            {detalle.item.username && (
-              <>
-                <span className="etiqueta">Usuario</span>
-                <span className="dato">{detalle.item.username}</span>
-              </>
-            )}
-
-            {detalle.item.url && (
-              <>
-                <span className="etiqueta">Dirección</span>
-                <span className="dato">{detalle.item.url}</span>
-              </>
-            )}
-
-            {detalle.item.secret && (
-              <>
-                <span className="etiqueta">Secreto</span>
-                <div>
-                  <div className="secreto">
-                    <div className={`secreto-valor${revelado ? "" : " oculto"}`}>
-                      {revelado ? detalle.item.secret : "•".repeat(18)}
-                    </div>
-                    <button className="boton" onClick={() => setRevelado(!revelado)}>
-                      {revelado ? "Ocultar" : "Revelar"}
-                    </button>
-                    <button
-                      className="boton"
-                      onClick={() => void navigator.clipboard?.writeText(detalle.item.secret)}
-                    >
-                      Copiar
-                    </button>
-                  </div>
-                  {detalle.fuerza && (
-                    <>
-                      <div className="medidor">
-                        <span
-                          style={{
-                            width: `${Math.min(100, (detalle.fuerza.bits / 128) * 100)}%`,
-                            background: colorPorBits(detalle.fuerza.bits),
-                          }}
-                        />
-                      </div>
-                      <div className="dato" style={{ marginTop: 6, color: "var(--texto-tenue)" }}>
-                        {detalle.fuerza.bits} bits · {detalle.fuerza.veredicto}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-
-            {detalle.item.notes && (
-              <>
-                <span className="etiqueta">Notas</span>
-                <span style={{ whiteSpace: "pre-wrap" }}>{detalle.item.notes}</span>
-              </>
-            )}
-
-            <span className="etiqueta">Identificador</span>
-            <span className="dato" style={{ color: "var(--texto-tenue)" }}>
-              {detalle.item.id}
-            </span>
+                {seleccion === fila.id && detalle && detalle.item.id === fila.id && (
+                  <>
+                    {editando ? (
+                      <Formulario
+                        entrada={detalle}
+                        alCerrar={() => setEditando(false)}
+                        alGuardar={(nuevas, fichero) => {
+                          setEditando(false);
+                          void cargarDetalle(fila.id);
+                          alCambiar(nuevas, fichero);
+                        }}
+                      />
+                    ) : (
+                      <Detalle
+                        detalle={detalle}
+                        alEditar={() => setEditando(true)}
+                        alBorrar={() => void borrar(detalle.item.id)}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
           </div>
-        </div>
+        </>
       )}
     </>
   );
 }
 
+/** Ficha abierta de una entrada, con el secreto tapado hasta que se pide. */
+function Detalle({
+  detalle,
+  alEditar,
+  alBorrar,
+}: {
+  readonly detalle: DetalleEntrada;
+  readonly alEditar: () => void;
+  readonly alBorrar: () => void;
+}) {
+  const [revelado, setRevelado] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+  const { item } = detalle;
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(item.secret);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1800);
+    } catch {
+      // Sin portapapeles —contexto no seguro, permiso denegado— revelar es lo
+      // único que queda: peor callar y que el usuario pegue lo que hubiera antes.
+      setRevelado(true);
+    }
+  }
+
+  return (
+    <div className="ficha aparece">
+      {detalle.trampa && (
+        <div className="aviso senal">
+          <span className="glifo">!</span>
+          <span>
+            Esta es una <strong>credencial trampa</strong>. Tú nunca la usas, así que cualquier uso
+            suyo significa que alguien ha entrado en tu bóveda.
+          </span>
+        </div>
+      )}
+
+      {item.secret && (
+        <div className="campo">
+          <span className="etiqueta">Contraseña</span>
+          <div className="secreto">
+            <div className={`secreto-valor${revelado ? "" : " oculto"}`}>
+              {revelado ? item.secret : "•".repeat(18)}
+            </div>
+            <div className="barra-acciones">
+              <button className="boton" onClick={() => setRevelado(!revelado)}>
+                {revelado ? "Ocultar" : "Revelar"}
+              </button>
+              <button className="boton" onClick={() => void copiar()}>
+                {copiado ? "Copiado ✓" : "Copiar"}
+              </button>
+            </div>
+          </div>
+          {detalle.fuerza && (
+            <>
+              <div className="medidor">
+                <span
+                  style={{
+                    width: `${Math.min(100, (detalle.fuerza.bits / 128) * 100)}%`,
+                    background: colorPorBits(detalle.fuerza.bits),
+                  }}
+                />
+              </div>
+              <div className="dato" style={{ marginTop: 6, color: "var(--texto-tenue)" }}>
+                {detalle.fuerza.bits} bits · {detalle.fuerza.veredicto}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="rejilla-datos">
+        <span className="etiqueta">Categoría</span>
+        <span>{nombreCategoria(item.custom["categoria"] ?? "")}</span>
+
+        <span className="etiqueta">Tipo</span>
+        <span>{TIPOS.find((t) => t.valor === item.type)?.nombre ?? item.type}</span>
+
+        {item.username && (
+          <>
+            <span className="etiqueta">Usuario</span>
+            <span className="dato copiable">{item.username}</span>
+          </>
+        )}
+
+        {item.url && (
+          <>
+            <span className="etiqueta">Dirección</span>
+            <span className="dato copiable">{item.url}</span>
+          </>
+        )}
+
+        {item.notes && (
+          <>
+            <span className="etiqueta">Notas</span>
+            <span style={{ whiteSpace: "pre-wrap" }}>{item.notes}</span>
+          </>
+        )}
+
+        {item.tags.length > 0 && (
+          <>
+            <span className="etiqueta">Etiquetas</span>
+            <span>{item.tags.join(", ")}</span>
+          </>
+        )}
+
+        <span className="etiqueta">Actualizada</span>
+        <span className="dato" style={{ color: "var(--texto-tenue)" }}>
+          {formatearFecha(item.updatedAt)}
+        </span>
+      </div>
+
+      <div className="barra-acciones ficha-pie">
+        <button className="boton principal" onClick={alEditar}>
+          Editar
+        </button>
+        {confirmando ? (
+          <>
+            <button className="boton peligro" onClick={alBorrar}>
+              Sí, borrar
+            </button>
+            <button className="boton" onClick={() => setConfirmando(false)}>
+              Cancelar
+            </button>
+          </>
+        ) : (
+          <button className="boton peligro" onClick={() => setConfirmando(true)}>
+            Borrar
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Alta y edición comparten formulario.
+ *
+ * Con `entrada` edita esa entrada; sin ella, crea una nueva. Tenerlo en un solo
+ * sitio evita que los dos caminos se separen: cualquier campo que se añada
+ * aparece en ambos, que es justo donde suelen quedarse los datos a medias.
+ */
 function Formulario({
+  entrada,
   alCerrar,
   alGuardar,
 }: {
+  readonly entrada?: DetalleEntrada;
   readonly alCerrar: () => void;
   readonly alGuardar: (filas: FilaEntrada[], fichero: Uint8Array) => void;
 }) {
-  const [tipo, setTipo] = useState<VaultItemType>("login");
-  const [titulo, setTitulo] = useState("");
-  const [usuario, setUsuario] = useState("");
-  const [url, setUrl] = useState("");
-  const [secreto, setSecreto] = useState("");
-  const [notas, setNotas] = useState("");
-  const [etiquetas, setEtiquetas] = useState("");
+  const previo = entrada?.item;
+  const [tipo, setTipo] = useState<VaultItemType>(previo?.type ?? "login");
+  const [categoria, setCategoria] = useState<Categoria>(comoCategoria(previo?.custom["categoria"]));
+  const [titulo, setTitulo] = useState(previo?.title ?? "");
+  const [usuario, setUsuario] = useState(previo?.username ?? "");
+  const [url, setUrl] = useState(previo?.url ?? "");
+  const [secreto, setSecreto] = useState(previo?.secret ?? "");
+  const [verSecreto, setVerSecreto] = useState(previo === undefined);
+  const [notas, setNotas] = useState(previo?.notes ?? "");
+  const [etiquetas, setEtiquetas] = useState(previo?.tags.join(", ") ?? "");
   const [fallo, setFallo] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   async function generar() {
     const { valor } = await nucleo.generar(false, 20, 7);
     setSecreto(valor);
+    setVerSecreto(true);
   }
 
   async function guardar(evento: React.FormEvent) {
@@ -264,19 +408,25 @@ function Formulario({
     setGuardando(true);
     setFallo(null);
     try {
-      const listaEtiquetas = etiquetas
-        .split(",")
-        .map((e) => e.trim())
-        .filter((e) => e.length > 0);
-      const { filas, fichero } = await nucleo.anadir({
+      // Los campos vacíos se mandan como cadena vacía en vez de omitirse: al
+      // editar, omitir un campo conserva el valor anterior, así que borrar un
+      // usuario sería imposible.
+      const draft = {
         type: tipo,
-        title: titulo,
-        ...(usuario ? { username: usuario } : {}),
-        ...(url ? { url } : {}),
-        ...(secreto ? { secret: secreto } : {}),
-        ...(notas ? { notes: notas } : {}),
-        ...(listaEtiquetas.length > 0 ? { tags: listaEtiquetas } : {}),
-      });
+        title: titulo.trim(),
+        username: usuario,
+        url,
+        secret: secreto,
+        notes: notas,
+        tags: etiquetas
+          .split(",")
+          .map((e) => e.trim())
+          .filter((e) => e.length > 0),
+        custom: { ...previo?.custom, categoria },
+      };
+      const { filas, fichero } = previo
+        ? await nucleo.actualizar(previo.id, draft)
+        : await nucleo.anadir(draft);
       alGuardar(filas, fichero);
     } catch (error) {
       setFallo(error instanceof Error ? error.message : String(error));
@@ -285,15 +435,37 @@ function Formulario({
   }
 
   return (
-    <form className="panel aparece" onSubmit={guardar} style={{ marginBottom: 16 }}>
+    <form className="panel formulario aparece" onSubmit={guardar}>
       <div className="panel-titulo">
-        <h2 style={{ fontSize: 17 }}>Nueva entrada</h2>
+        <h2 style={{ fontSize: 17 }}>{previo ? "Editar entrada" : "Nueva entrada"}</h2>
         <button type="button" className="boton" onClick={alCerrar}>
           Cancelar
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+      <label className="campo">
+        <span className="etiqueta">Nombre</span>
+        <input
+          type="text"
+          value={titulo}
+          onChange={(e) => setTitulo(e.target.value)}
+          placeholder="Netflix"
+          required
+          autoFocus={previo === undefined}
+        />
+      </label>
+
+      <div className="rejilla-campos">
+        <label className="campo">
+          <span className="etiqueta">Categoría</span>
+          <select value={categoria} onChange={(e) => setCategoria(e.target.value as Categoria)}>
+            {CATEGORIAS.map((c) => (
+              <option key={c.valor} value={c.valor}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="campo">
           <span className="etiqueta">Tipo</span>
           <select value={tipo} onChange={(e) => setTipo(e.target.value as VaultItemType)}>
@@ -305,30 +477,48 @@ function Formulario({
           </select>
         </label>
         <label className="campo">
-          <span className="etiqueta">Título</span>
-          <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} required />
-        </label>
-        <label className="campo">
           <span className="etiqueta">Usuario</span>
-          <input type="text" value={usuario} onChange={(e) => setUsuario(e.target.value)} />
+          <input
+            type="text"
+            value={usuario}
+            onChange={(e) => setUsuario(e.target.value)}
+            placeholder="tucorreo@ejemplo.com"
+            autoCapitalize="none"
+            autoCorrect="off"
+          />
         </label>
         <label className="campo">
           <span className="etiqueta">Dirección</span>
-          <input type="text" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="netflix.com"
+            autoCapitalize="none"
+            autoCorrect="off"
+            inputMode="url"
+          />
         </label>
       </div>
 
       <div className="campo">
-        <span className="etiqueta">Secreto</span>
-        <div className="barra-acciones">
-          <input
-            type="text"
-            value={secreto}
-            onChange={(e) => setSecreto(e.target.value)}
-            style={{ flex: 1 }}
-          />
+        <span className="etiqueta">Contraseña</span>
+        <input
+          type={verSecreto ? "text" : "password"}
+          value={secreto}
+          onChange={(e) => setSecreto(e.target.value)}
+          aria-label="Contraseña"
+          autoCapitalize="none"
+          autoCorrect="off"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <div className="barra-acciones" style={{ marginTop: 8 }}>
+          <button type="button" className="boton" onClick={() => setVerSecreto(!verSecreto)}>
+            {verSecreto ? "Ocultar" : "Ver"}
+          </button>
           <button type="button" className="boton" onClick={() => void generar()}>
-            Generar
+            Generar una segura
           </button>
         </div>
       </div>
@@ -350,8 +540,12 @@ function Formulario({
         </div>
       )}
 
-      <button type="submit" className="boton principal" disabled={guardando || titulo.trim() === ""}>
-        {guardando ? "Guardando…" : "Guardar"}
+      <button
+        type="submit"
+        className="boton principal ancho"
+        disabled={guardando || titulo.trim() === ""}
+      >
+        {guardando ? "Guardando…" : previo ? "Guardar cambios" : "Guardar"}
       </button>
     </form>
   );
@@ -419,24 +613,26 @@ export function VistaCanarios({
         {trampas.length === 0 ? (
           <div className="vacio">Todavía no has sembrado ninguna.</div>
         ) : (
-          <table className="tabla">
-            <thead>
-              <tr>
-                <th>Servicio</th>
-                <th>Usuario</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trampas.map((fila) => (
-                <tr key={fila.id} style={{ cursor: "default" }}>
-                  <td>{fila.titulo}</td>
-                  <td className="dato" style={{ color: "var(--texto-medio)" }}>
-                    {fila.usuario}
-                  </td>
+          <div className="tabla-marco">
+            <table className="tabla">
+              <thead>
+                <tr>
+                  <th>Servicio</th>
+                  <th>Usuario</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {trampas.map((fila) => (
+                  <tr key={fila.id} style={{ cursor: "default" }}>
+                    <td>{fila.titulo}</td>
+                    <td className="dato" style={{ color: "var(--texto-medio)" }}>
+                      {fila.usuario}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>
@@ -504,34 +700,36 @@ export function VistaFiltraciones() {
           )}
 
           <div className="panel">
-            <table className="tabla">
-              <thead>
-                <tr>
-                  <th style={{ width: "40%" }}>Entrada</th>
-                  <th>Filtración</th>
-                  <th>Entropía</th>
-                  <th>Veredicto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {datos.filas.map((fila) => (
-                  <tr key={fila.id} style={{ cursor: "default" }}>
-                    <td>{fila.titulo}</td>
-                    <td>
-                      <span className={`distintivo ${fila.filtrada ? "alarma" : "jade"}`}>
-                        {fila.filtrada ? "filtrada" : "limpia"}
-                      </span>
-                    </td>
-                    <td className="dato" style={{ color: colorPorBits(fila.bits) }}>
-                      {fila.bits} bits
-                    </td>
-                    <td className="dato" style={{ color: "var(--texto-medio)" }}>
-                      {fila.veredicto}
-                    </td>
+            <div className="tabla-marco">
+              <table className="tabla">
+                <thead>
+                  <tr>
+                    <th style={{ width: "40%" }}>Entrada</th>
+                    <th>Filtración</th>
+                    <th>Entropía</th>
+                    <th>Veredicto</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {datos.filas.map((fila) => (
+                    <tr key={fila.id} style={{ cursor: "default" }}>
+                      <td>{fila.titulo}</td>
+                      <td>
+                        <span className={`distintivo ${fila.filtrada ? "alarma" : "jade"}`}>
+                          {fila.filtrada ? "filtrada" : "limpia"}
+                        </span>
+                      </td>
+                      <td className="dato" style={{ color: colorPorBits(fila.bits) }}>
+                        {fila.bits} bits
+                      </td>
+                      <td className="dato" style={{ color: "var(--texto-medio)" }}>
+                        {fila.veredicto}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}
@@ -606,28 +804,30 @@ export function VistaAuditoria() {
           )}
 
           <div className="panel">
-            <table className="tabla">
-              <thead>
-                <tr>
-                  <th style={{ width: 70 }}>#</th>
-                  <th style={{ width: 220 }}>Momento</th>
-                  <th>Suceso</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...datos.entradas].reverse().map((entrada) => (
-                  <tr key={entrada.indice} style={{ cursor: "default" }}>
-                    <td className="dato" style={{ color: "var(--texto-tenue)" }}>
-                      {entrada.indice}
-                    </td>
-                    <td className="dato" style={{ color: "var(--texto-medio)" }}>
-                      {formatearFecha(entrada.momento)}
-                    </td>
-                    <td className="dato">{entrada.tipo}</td>
+            <div className="tabla-marco">
+              <table className="tabla">
+                <thead>
+                  <tr>
+                    <th style={{ width: 70 }}>#</th>
+                    <th style={{ width: 220 }}>Momento</th>
+                    <th>Suceso</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {[...datos.entradas].reverse().map((entrada) => (
+                    <tr key={entrada.indice} style={{ cursor: "default" }}>
+                      <td className="dato" style={{ color: "var(--texto-tenue)" }}>
+                        {entrada.indice}
+                      </td>
+                      <td className="dato" style={{ color: "var(--texto-medio)" }}>
+                        {formatearFecha(entrada.momento)}
+                      </td>
+                      <td className="dato">{entrada.tipo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}

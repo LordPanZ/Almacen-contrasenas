@@ -206,30 +206,32 @@ function TablaSobres({ sobres }: { readonly sobres: readonly SobreGuardian[] }) 
         </span>
       </div>
 
-      <table className="tabla">
-        <thead>
-          <tr>
-            <th style={{ width: "26%" }}>Guardián</th>
-            <th>Huella de su clave</th>
-            <th style={{ width: 130 }} />
-          </tr>
-        </thead>
-        <tbody>
-          {sobres.map((sobre) => (
-            <tr key={sobre.fichero} style={{ cursor: "default" }}>
-              <td>{sobre.nombre}</td>
-              <td className="dato" style={{ color: "var(--texto-medio)" }}>
-                {sobre.huella}
-              </td>
-              <td>
-                <button className="boton" onClick={() => descargar(sobre.bytes, sobre.fichero)}>
-                  Descargar
-                </button>
-              </td>
+      <div className="tabla-marco">
+        <table className="tabla">
+          <thead>
+            <tr>
+              <th style={{ width: "26%" }}>Guardián</th>
+              <th>Huella de su clave</th>
+              <th style={{ width: 130 }} />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sobres.map((sobre) => (
+              <tr key={sobre.fichero} style={{ cursor: "default" }}>
+                <td>{sobre.nombre}</td>
+                <td className="dato" style={{ color: "var(--texto-medio)" }}>
+                  {sobre.huella}
+                </td>
+                <td>
+                  <button className="boton" onClick={() => descargar(sobre.bytes, sobre.fichero)}>
+                    Descargar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -388,28 +390,30 @@ function SeccionReparto({
                 {politica.policyId}
               </span>
             </div>
-            <table className="tabla">
-              <thead>
-                <tr>
-                  <th style={{ width: "26%" }}>Guardián</th>
-                  <th>Huella de su clave pública</th>
-                  <th style={{ width: 190 }}>Alta</th>
-                </tr>
-              </thead>
-              <tbody>
-                {politica.guardianes.map((guardian) => (
-                  <tr key={guardian.id} style={{ cursor: "default" }}>
-                    <td>{guardian.nombre}</td>
-                    <td className="dato" style={{ color: "var(--texto-medio)" }}>
-                      {guardian.huella}
-                    </td>
-                    <td className="dato" style={{ color: "var(--texto-tenue)" }}>
-                      {formatearFecha(guardian.anadidoEn)}
-                    </td>
+            <div className="tabla-marco">
+              <table className="tabla">
+                <thead>
+                  <tr>
+                    <th style={{ width: "26%" }}>Guardián</th>
+                    <th>Huella de su clave pública</th>
+                    <th style={{ width: 190 }}>Alta</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {politica.guardianes.map((guardian) => (
+                    <tr key={guardian.id} style={{ cursor: "default" }}>
+                      <td>{guardian.nombre}</td>
+                      <td className="dato" style={{ color: "var(--texto-medio)" }}>
+                        {guardian.huella}
+                      </td>
+                      <td className="dato" style={{ color: "var(--texto-tenue)" }}>
+                        {formatearFecha(guardian.anadidoEn)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="prosa" style={{ marginTop: 14, fontSize: 13.5 }}>
               La huella son doce bytes del hash de la clave pública. Sirve para que un guardián y tú
               comprobéis por teléfono que el sobre que recibió es el que le mandaste: comparar 1216

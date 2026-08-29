@@ -107,6 +107,9 @@ function filaDe(item: VaultItem, clave: SecretBuffer) {
     titulo: item.title,
     usuario: item.username ?? "",
     url: item.url ?? "",
+    // La categoría es opcional: las entradas de bóvedas anteriores y las
+    // creadas desde la CLI no la traen, y deben seguir listándose igual.
+    categoria: item.custom?.["categoria"] ?? "otros",
     etiquetas: item.tags,
     actualizado: item.updatedAt,
     trampa: item.secret ? isCanary(item.secret, clave) : false,
@@ -407,6 +410,7 @@ const operaciones: Record<string, (carga: never) => unknown> = {
           notes: item.notes ?? "",
           username: item.username ?? "",
           url: item.url ?? "",
+          custom: item.custom ?? {},
         },
         trampa: item.secret ? isCanary(item.secret, clave) : false,
         fuerza: item.secret ? estimateStrength(item.secret) : null,

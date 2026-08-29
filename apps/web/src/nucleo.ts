@@ -35,6 +35,42 @@ function llamar<T>(operacion: string, carga: unknown = {}): Promise<T> {
   });
 }
 
+/**
+ * Categorías con las que se agrupan las entradas.
+ *
+ * Viven aquí y no en el paquete de bóveda porque son una comodidad de la
+ * interfaz, no parte del formato: se guardan en `custom.categoria`, que ya
+ * viaja cifrado dentro de la entrada como el resto de sus campos. Una entrada
+ * de una bóveda antigua, o creada desde la CLI, simplemente no la trae y cae
+ * en «otros» sin que nada se rompa.
+ */
+export const CATEGORIAS = [
+  { valor: "finanzas", nombre: "Finanzas", glifo: "€" },
+  { valor: "tv-musica", nombre: "TV y música", glifo: "▶" },
+  { valor: "entretenimiento", nombre: "Entretenimiento", glifo: "◆" },
+  { valor: "compras", nombre: "Compras", glifo: "▧" },
+  { valor: "redes", nombre: "Redes sociales", glifo: "◍" },
+  { valor: "trabajo", nombre: "Trabajo y estudios", glifo: "▤" },
+  { valor: "utilidades", nombre: "Utilidades", glifo: "⚙" },
+  { valor: "otros", nombre: "Otros", glifo: "·" },
+] as const;
+
+export type Categoria = (typeof CATEGORIAS)[number]["valor"];
+
+export const CATEGORIA_POR_DEFECTO: Categoria = "otros";
+
+/** Nombre legible de una categoría; tolera valores que ya no existan. */
+export function nombreCategoria(valor: string): string {
+  return CATEGORIAS.find((c) => c.valor === valor)?.nombre ?? "Otros";
+}
+
+/** Normaliza lo que venga guardado a una categoría conocida. */
+export function comoCategoria(valor: string | undefined): Categoria {
+  return CATEGORIAS.some((c) => c.valor === valor)
+    ? (valor as Categoria)
+    : CATEGORIA_POR_DEFECTO;
+}
+
 export interface ResumenBoveda {
   readonly vaultId: string;
   readonly ranuras: number;
@@ -50,6 +86,7 @@ export interface FilaEntrada {
   readonly titulo: string;
   readonly usuario: string;
   readonly url: string;
+  readonly categoria: Categoria;
   readonly etiquetas: readonly string[];
   readonly actualizado: number;
   readonly trampa: boolean;
@@ -73,6 +110,7 @@ export interface DetalleEntrada {
     url: string;
     notes: string;
     tags: readonly string[];
+    custom: Readonly<Record<string, string>>;
     createdAt: number;
     updatedAt: number;
   };
