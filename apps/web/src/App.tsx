@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { VistaGuardianes } from "./Guardianes.tsx";
 import { Portada } from "./Portada.tsx";
 import {
   VistaAuditoria,
@@ -25,6 +26,7 @@ type Vista =
   | "canarios"
   | "filtraciones"
   | "coaccion"
+  | "guardianes"
   | "auditoria"
   | "fichero";
 
@@ -33,6 +35,7 @@ const NAV: readonly { vista: Vista; nombre: string; glifo: string; grupo?: strin
   { vista: "generador", nombre: "Generador", glifo: "⚂" },
   { vista: "canarios", nombre: "Trampas", glifo: "◈", grupo: "Protección" },
   { vista: "coaccion", nombre: "Coacción", glifo: "◫" },
+  { vista: "guardianes", nombre: "Guardianes", glifo: "◎" },
   { vista: "filtraciones", nombre: "Filtraciones", glifo: "◉" },
   { vista: "auditoria", nombre: "Auditoría", glifo: "⌘", grupo: "Verificación" },
   { vista: "fichero", nombre: "El fichero", glifo: "▣" },
@@ -139,6 +142,15 @@ export function App() {
           )}
           {vista === "coaccion" && (
             <VistaCoaccion
+              passwordActual={password}
+              alActualizarFichero={(b) => {
+                setFichero(b);
+                void guardarLocal(b);
+              }}
+            />
+          )}
+          {vista === "guardianes" && (
+            <VistaGuardianes
               passwordActual={password}
               alActualizarFichero={(b) => {
                 setFichero(b);

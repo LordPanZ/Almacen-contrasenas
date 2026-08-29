@@ -424,7 +424,15 @@ function sealSlotContents(
   extras: ReadonlyMap<string, Uint8Array>,
 ): Uint8Array {
   const capacity = slotPlaintextCapacity(parsed.info.slotSize);
-  const parts: Uint8Array[] = [encodeEnvelope(envelope), uint16(extras.size)];
+
+  // El sobre es el único trozo con material de clave en claro, y por tanto el
+  // único que hay que borrar después. Se separa del resto a propósito: los
+  // anexos y los ítems que van en `parts` son buffers de los que somos meros
+  // referentes, y borrarlos aquí destruiría en memoria lo que el llamante sigue
+  // usando —exactamente el fallo que este comentario existe para evitar—.
+  const sobre = encodeEnvelope(envelope);
+  const parts: Uint8Array[] = [sobre, uint16(extras.size)];
+
   // Orden alfabético: el criptograma de dos bóvedas con los mismos anexos no
   // debe depender de en qué orden los escribió el programa.
   for (const clave of [...extras.keys()].sort()) {
@@ -433,6 +441,7 @@ function sealSlotContents(
     parts.push(new Uint8Array([nombre.length]), nombre, uint32(valor.length), valor);
   }
   parts.push(uint32(items.length));
+
   for (const item of items) {
     const sealed = sealVaultItem(envelope.dataKey, vaultId, item);
     parts.push(concatBytes(fromHex(item.id), uint32(sealed.length), sealed));
@@ -440,7 +449,7 @@ function sealSlotContents(
 
   const body = concatBytes(...parts);
   if (body.length > capacity) {
-    zeroize(body, ...parts);
+    zeroize(body, sobre);
     throw new VaultFullError(
       `el contenido ocupa ${body.length} bytes y la ranura solo admite ${capacity}`,
     );
@@ -450,7 +459,8 @@ function sealSlotContents(
   try {
     return aeadSeal(slotKey, plaintext, slotAad(parsed.header, slot));
   } finally {
-    zeroize(plaintext, body, ...parts);
+    // Solo lo que hemos creado nosotros y contiene claves en claro.
+    zeroize(plaintext, body, sobre);
   }
 }
 
@@ -465,15 +475,16 @@ function parseSlotContents(plaintext: Uint8Array): {
   // El identificador de bóveda entra en el `aad` de cada ítem, así que hay que
   // leer el sobre antes que los ítems: no es un orden arbitrario del formato.
   const vaultId = formatId(envelope.vaultId);
+
   const extras = new Map<string, Uint8Array>();
   const totalExtras = reader.takeUint16();
   for (let i = 0; i < totalExtras; i++) {
     const clave = utf8Decode(reader.take(reader.takeUint8()));
     extras.set(clave, Uint8Array.from(reader.take(reader.takeUint32())));
   }
+
   const count = reader.takeUint32();
   const items = new Map<string, VaultItem>();
-
   for (let i = 0; i < count; i++) {
     const itemId = toHex(reader.take(ITEM_ID_LENGTH));
     const sealed = reader.take(reader.takeUint32());

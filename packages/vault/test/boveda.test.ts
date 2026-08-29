@@ -423,6 +423,34 @@ describe("anexos de la bóveda", () => {
     expect(toHex(file)).not.toContain(toHex(utf8Encode("fragmento-secretísimo-de-guardián")));
   });
 
+  it("guardar NO destruye los anexos que siguen en memoria", () => {
+    // Regresión: al empaquetar la ranura, los valores de los anexos entraban en
+    // la lista de trozos que se borra al terminar. El fichero salía correcto,
+    // pero la sesión viva se quedaba con los anexos a ceros, así que la
+    // siguiente lectura fallaba al interpretarlos.
+    const { vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    const original = Uint8Array.from([5, 1, 0, 42, 99, 7]);
+    vault.setExtra("deadman", original);
+    vault.auditLog = utf8Encode("registro");
+
+    vault.serialize();
+
+    expect(vault.getExtra("deadman")).toEqual(original);
+    expect(vault.auditLog).toEqual(utf8Encode("registro"));
+
+    // Y sigue siendo cierto tras guardar varias veces seguidas.
+    vault.serialize();
+    vault.serialize();
+    expect(vault.getExtra("deadman")).toEqual(original);
+  });
+
+  it("los ítems descifrados sobreviven a guardar", () => {
+    const { vault } = nuevaBoveda({ items: [ENTRADA_BANCO] });
+    vault.serialize();
+    vault.serialize();
+    expect(vault.find("santander")[0]?.secret).toBe("contraseña-del-banco-9f3a");
+  });
+
   it("un anexo que no cabe falla sin destruir el anterior", () => {
     const { vault } = nuevaBoveda({ slotSize: 4096 });
     vault.setExtra("recovery", new Uint8Array(100).fill(3));

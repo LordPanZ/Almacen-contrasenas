@@ -685,3 +685,38 @@ input::placeholder {
     gap: 4px 0;
   }
 }
+
+/* ─── Selector de ficheros ────────────────────────────────────────────── */
+
+/*
+ * El único control que faltaba: los sobres de guardián entran como ficheros y
+ * el control nativo del navegador desentona con todo lo demás. Mismo lenguaje
+ * que los campos de texto, con borde discontinuo porque aquí se suelta algo.
+ */
+input[type="file"] {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--fondo-hueco);
+  border: 1px dashed var(--linea);
+  border-radius: var(--radio);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--texto-medio);
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 6px 12px;
+  background: var(--fondo-panel-alto);
+  border: 1px solid var(--linea-viva);
+  border-radius: var(--radio);
+  color: var(--texto);
+  font-family: var(--display);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: #202225;
+  border-color: #40444a;
+}
