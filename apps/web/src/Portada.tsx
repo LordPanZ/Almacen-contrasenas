@@ -21,15 +21,49 @@ export function Portada({ ficheroGuardado, alAbrir }: Props) {
   const [repetida, setRepetida] = useState("");
   const [perfil, setPerfil] = useState("moderate");
   const [fichero, setFichero] = useState<Uint8Array | null>(ficheroGuardado);
+  const [nombreFichero, setNombreFichero] = useState<string | null>(null);
   const [info, setInfo] = useState<InfoFichero | null>(null);
   const [fuerza, setFuerza] = useState<{ bits: number; veredicto: string; avisos: readonly string[] } | null>(null);
   const [trabajando, setTrabajando] = useState(false);
   const [fallo, setFallo] = useState<string | null>(null);
   const entradaFichero = useRef<HTMLInputElement>(null);
 
+  /**
+   * Se revisa el fichero nada más elegirlo, y se dice en voz alta si no vale.
+   *
+   * Antes el fallo se tragaba aquí y el rótulo seguía diciendo «cargado», así
+   * que el único aviso llegaba tras escribir la contraseña y pulsar
+   * desbloquear. En el móvil el selector de ficheros ignora a menudo el
+   * `accept`, de modo que elegir el fichero equivocado —el propio cerbero.html,
+   * sin ir más lejos— es fácil, y el usuario se quedaba mirando un formulario
+   * que parecía correcto.
+   */
   useEffect(() => {
-    if (fichero) void nucleo.inspeccionar(fichero).then(setInfo).catch(() => setInfo(null));
-  }, [fichero]);
+    if (!fichero) {
+      setInfo(null);
+      return;
+    }
+    let vigente = true;
+    void nucleo.inspeccionar(fichero).then(
+      (inspeccionado) => {
+        if (!vigente) return;
+        setInfo(inspeccionado);
+        setFallo(null);
+      },
+      () => {
+        if (!vigente) return;
+        setInfo(null);
+        setFallo(
+          `${nombreFichero ? `«${nombreFichero}»` : "Ese fichero"} no es una bóveda de Cerbero. ` +
+            "El fichero de una bóveda acaba en .cerbero y lo descargas desde «El fichero» con la " +
+            "bóveda abierta. Si todavía no tienes ninguna, usa «Crear una nueva».",
+        );
+      },
+    );
+    return () => {
+      vigente = false;
+    };
+  }, [fichero, nombreFichero]);
 
   useEffect(() => {
     if (modo !== "crear" || password.length === 0) {
@@ -48,6 +82,7 @@ export function Portada({ ficheroGuardado, alAbrir }: Props) {
   async function importar(evento: React.ChangeEvent<HTMLInputElement>) {
     const elegido = evento.target.files?.[0];
     if (!elegido) return;
+    setNombreFichero(elegido.name);
     setFichero(new Uint8Array(await elegido.arrayBuffer()));
     setModo("abrir");
     setFallo(null);
@@ -140,6 +175,27 @@ export function Portada({ ficheroGuardado, alAbrir }: Props) {
               </button>
             </div>
 
+            {/*
+              Los dos botones se parecen demasiado para quien llega por primera
+              vez, y el que no necesita —abrir— es el que pide un fichero: se
+              queda atascado buscando qué elegir cuando lo que le toca es crear.
+            */}
+            {!ficheroGuardado && (
+              <p className="prosa" style={{ fontSize: 13.5, marginBottom: 20 }}>
+                {modo === "abrir" ? (
+                  <>
+                    <strong>Abrir</strong> es para un fichero <em>.cerbero</em> que ya tengas. Si es
+                    tu primera vez aquí, lo que necesitas es <strong>Crear una nueva</strong>.
+                  </>
+                ) : (
+                  <>
+                    Elige una contraseña maestra y ya está: la bóveda se queda en este navegador. No
+                    hace falta ningún fichero para empezar.
+                  </>
+                )}
+              </p>
+            )}
+
             {modo === "abrir" && (
               <div className="campo">
                 <span className="etiqueta">Fichero</span>
@@ -151,11 +207,21 @@ export function Portada({ ficheroGuardado, alAbrir }: Props) {
                   >
                     Elegir fichero…
                   </button>
-                  <span className="dato" style={{ color: "var(--texto-tenue)" }}>
+                  <span
+                    className="dato"
+                    style={{
+                      color: fichero && !info ? "var(--alarma)" : "var(--texto-tenue)",
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
                     {info
                       ? `${info.ranuras} ranuras · ${(info.bytes / 1024).toFixed(0)} KiB`
                       : fichero
-                        ? "cargado"
+                        ? // Nunca «cargado» a secas: si no se ha podido leer, el
+                          // rótulo tiene que delatarlo, no dar por bueno el paso.
+                          `${nombreFichero ?? "el fichero"} · no vale`
                         : ficheroGuardado
                           ? "guardado en este navegador"
                           : "ninguno"}
