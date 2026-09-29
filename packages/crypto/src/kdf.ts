@@ -104,6 +104,7 @@ export const KDF_LABELS = {
   breachRequest: "breach-request-key",
   hardwareFactor: "hardware-factor",
   webauthnSalt: "webauthn-prf-salt",
+  attachmentKey: "attachment-key",
 } as const;
 
 export type KdfLabel = (typeof KDF_LABELS)[keyof typeof KDF_LABELS] | (string & {});

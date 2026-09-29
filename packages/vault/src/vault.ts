@@ -45,6 +45,7 @@ import {
   VaultLockedError,
   VaultUnlockError,
 } from "./errors.ts";
+import { newAttachmentId, openAttachment, sealAttachment } from "./adjuntos.ts";
 import {
   createEnvelope,
   decodeEnvelope,
@@ -416,6 +417,25 @@ export class UnlockedVault {
       maestraNueva.destroy();
     }
     return this.serialize();
+  }
+
+  /**
+   * Cifra un documento con la clave de datos de esta bóveda.
+   *
+   * Devuelve el criptograma y su identificador; guardarlos y anotar la
+   * referencia en una entrada es cosa de quien llama. La clave de datos no sale
+   * de aquí, por eso el cifrado pasa por la bóveda y no por una función suelta.
+   */
+  sealAttachment(data: Uint8Array): { id: string; sealed: Uint8Array } {
+    const envelope = this.#requireEnvelope();
+    const id = newAttachmentId();
+    return { id, sealed: sealAttachment(envelope.dataKey, this.#vaultId, id, data) };
+  }
+
+  /** Descifra un documento. Falla si es de otra bóveda o fue alterado. */
+  openAttachment(id: string, sealed: Uint8Array): Uint8Array {
+    const envelope = this.#requireEnvelope();
+    return openAttachment(envelope.dataKey, this.#vaultId, id, sealed);
   }
 
   /** Borra de memoria el sobre, la clave de ranura y los ítems descifrados. */

@@ -40,6 +40,17 @@ export {
 } from "./keys.ts";
 
 export {
+  ATTACHMENT_ID_LENGTH,
+  MAX_ATTACHMENT_BYTES,
+  newAttachmentId,
+  openAttachment,
+  packAttachments,
+  sealAttachment,
+  unpackAttachments,
+} from "./adjuntos.ts";
+export type { PackedAttachment } from "./adjuntos.ts";
+
+export {
   ITEM_BUCKETS,
   ITEM_ID_LENGTH,
   VAULT_ITEM_TYPES,
