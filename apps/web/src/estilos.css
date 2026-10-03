@@ -957,79 +957,6 @@ input::placeholder {
   overflow-x: auto;
 }
 
-/* ─── Documentos adjuntos ─────────────────────────────────────────────── */
-
-.adjuntos {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--linea);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.adjuntos-vacio {
-  color: var(--texto-tenue);
-  font-size: 13px;
-}
-
-.adjuntos-lista {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.adjunto {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 11px 12px;
-  background: var(--fondo-panel);
-  border: 1px solid var(--linea);
-  border-radius: var(--radio);
-}
-
-.adjunto-cuerpo {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.adjunto-nombre {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 550;
-  max-width: 100%;
-}
-
-.adjunto-meta {
-  color: var(--texto-tenue);
-}
-
-.visor {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  background: var(--fondo);
-  border: 1px solid var(--linea-viva);
-  border-radius: var(--radio);
-}
-
-.visor img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  border-radius: 2px;
-}
-
 /* ─── Móvil ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 860px) {
@@ -1224,15 +1151,6 @@ input::placeholder {
   }
 
   .ficha-pie .boton {
-    flex: 1;
-    justify-content: center;
-  }
-
-  .adjunto .barra-acciones {
-    width: 100%;
-  }
-
-  .adjunto .barra-acciones .boton {
     flex: 1;
     justify-content: center;
   }

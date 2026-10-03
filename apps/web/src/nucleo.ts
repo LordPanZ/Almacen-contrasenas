@@ -1,7 +1,6 @@
 import CerberoWorker from "./boveda.worker.ts?worker&inline";
 import type { Argon2Profile } from "@cerbero/crypto";
 import type { VaultItemDraft, VaultItemType } from "@cerbero/vault";
-import type { Adjunto } from "./adjuntos.ts";
 
 /**
  * Puente con el worker criptográfico.
@@ -52,7 +51,6 @@ export const CATEGORIAS = [
   { valor: "compras", nombre: "Compras", glifo: "▧" },
   { valor: "redes", nombre: "Redes sociales", glifo: "◍" },
   { valor: "trabajo", nombre: "Trabajo y estudios", glifo: "▤" },
-  { valor: "documentos", nombre: "Documentos", glifo: "▭" },
   { valor: "utilidades", nombre: "Utilidades", glifo: "⚙" },
   { valor: "otros", nombre: "Otros", glifo: "·" },
 ] as const;
@@ -261,14 +259,6 @@ export const nucleo = {
       intervaloDias,
       graciaDias,
     }),
-  prepararAdjunto: (bytes: Uint8Array) =>
-    llamar<{ id: string; sealed: Uint8Array }>("prepararAdjunto", { bytes }),
-  registrarAdjunto: (itemId: string, adjunto: Adjunto) =>
-    llamar<{ fichero: Uint8Array; filas: FilaEntrada[] }>("registrarAdjunto", { itemId, adjunto }),
-  abrirAdjunto: (id: string, sealed: Uint8Array) =>
-    llamar<{ bytes: Uint8Array }>("abrirAdjunto", { id, sealed }),
-  quitarAdjunto: (itemId: string, id: string) =>
-    llamar<{ fichero: Uint8Array; filas: FilaEntrada[] }>("quitarAdjunto", { itemId, id }),
   cerrar: () => llamar<{ cerrada: boolean }>("cerrar"),
 };
 
@@ -276,7 +266,6 @@ export const nucleo = {
 
 const BASE = "cerbero";
 const ALMACEN = "bovedas";
-const ADJUNTOS = "adjuntos";
 const CLAVE = "actual";
 
 /**
@@ -294,14 +283,8 @@ export function almacenamientoPersistente(): boolean {
 
 function abrirBase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    // Versión 2: añade el almacén de documentos. Quien venga de la 1 conserva su
-    // bóveda; solo se crea lo que falte.
-    const peticion = indexedDB.open(BASE, 2);
-    peticion.onupgradeneeded = () => {
-      const base = peticion.result;
-      if (!base.objectStoreNames.contains(ALMACEN)) base.createObjectStore(ALMACEN);
-      if (!base.objectStoreNames.contains(ADJUNTOS)) base.createObjectStore(ADJUNTOS);
-    };
+    const peticion = indexedDB.open(BASE, 1);
+    peticion.onupgradeneeded = () => peticion.result.createObjectStore(ALMACEN);
     peticion.onsuccess = () => resolve(peticion.result);
     peticion.onerror = () => reject(peticion.error ?? new Error("no se pudo abrir IndexedDB"));
   });
@@ -360,11 +343,8 @@ export async function olvidarLocal(): Promise<void> {
   try {
     const base = await abrirBase();
     await new Promise<void>((resolve) => {
-      // Los documentos van con la bóveda: dejarlos huérfanos ocuparía espacio
-      // que ya no se puede abrir ni borrar desde la interfaz.
-      const tx = base.transaction([ALMACEN, ADJUNTOS], "readwrite");
+      const tx = base.transaction(ALMACEN, "readwrite");
       tx.objectStore(ALMACEN).delete(CLAVE);
-      tx.objectStore(ADJUNTOS).clear();
       tx.oncomplete = () => resolve();
       tx.onerror = () => resolve();
     });
@@ -374,71 +354,13 @@ export async function olvidarLocal(): Promise<void> {
   }
 }
 
-/* ─── Documentos adjuntos ──────────────────────────────────────────────── */
-
-/**
- * A diferencia de la bóveda, aquí un fallo no se traga: guardar un documento y
- * que no se guarde sin avisar es perder un escrito de propiedad.
- */
-async function conAdjuntos<T>(
-  modo: IDBTransactionMode,
-  fn: (almacen: IDBObjectStore) => IDBRequest<T>,
-): Promise<T> {
-  if (!almacenamientoPersistente()) {
-    throw new Error(
-      "Abierto como fichero local el navegador no guarda documentos. Usa la dirección web de Cerbero.",
-    );
-  }
-  const base = await abrirBase();
-  try {
-    return await new Promise<T>((resolve, reject) => {
-      const tx = base.transaction(ADJUNTOS, modo);
-      const peticion = fn(tx.objectStore(ADJUNTOS));
-      tx.oncomplete = () => resolve(peticion.result);
-      tx.onerror = () => reject(tx.error ?? new Error("falló el almacén de documentos"));
-      tx.onabort = () => reject(tx.error ?? new Error("se canceló el guardado del documento"));
-    });
-  } finally {
-    base.close();
-  }
-}
-
-export const almacenAdjuntos = {
-  guardar: (id: string, sellado: Uint8Array) =>
-    conAdjuntos("readwrite", (a) => a.put(sellado, id)).then(() => undefined),
-  leer: (id: string) =>
-    conAdjuntos("readonly", (a) => a.get(id) as IDBRequest<Uint8Array | undefined>).then(
-      (v) => v ?? null,
-    ),
-  borrar: (id: string) => conAdjuntos("readwrite", (a) => a.delete(id)).then(() => undefined),
-  async todos(): Promise<{ id: string; sealed: Uint8Array }[]> {
-    const [ids, valores] = await Promise.all([
-      conAdjuntos("readonly", (a) => a.getAllKeys()),
-      conAdjuntos("readonly", (a) => a.getAll() as IDBRequest<Uint8Array[]>),
-    ]);
-    return ids.map((id, i) => ({ id: String(id), sealed: valores[i] as Uint8Array }));
-  },
-  /** Pide al navegador que no expulse los datos del sitio cuando falte espacio. */
-  async pedirPersistencia(): Promise<boolean> {
-    try {
-      return (await navigator.storage?.persist?.()) ?? false;
-    } catch {
-      return false;
-    }
-  },
-};
-
 /** Descarga el fichero de bóveda. Es la copia de seguridad de verdad. */
-export function descargar(
-  fichero: Uint8Array,
-  nombre = "boveda.cerbero",
-  mime = "application/octet-stream",
-): void {
+export function descargar(fichero: Uint8Array, nombre = "boveda.cerbero"): void {
   // Copia sobre un ArrayBuffer propio: el Uint8Array que llega del worker puede
   // estar respaldado por un buffer compartido, que Blob no acepta.
   const copia = new Uint8Array(fichero.length);
   copia.set(fichero);
-  const url = URL.createObjectURL(new Blob([copia.buffer], { type: mime }));
+  const url = URL.createObjectURL(new Blob([copia.buffer], { type: "application/octet-stream" }));
   const enlace = document.createElement("a");
   enlace.href = url;
   enlace.download = nombre;

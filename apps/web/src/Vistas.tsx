@@ -1,15 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { packAttachments, unpackAttachments } from "@cerbero/vault";
-import { Adjuntos } from "./Adjuntos.tsx";
-import { leerAdjuntos } from "./adjuntos.ts";
+import { useEffect, useState } from "react";
 import {
   CATEGORIAS,
   comoCategoria,
-  descargar,
   formatearBytes,
   formatearFecha,
   nombreCategoria,
-  almacenAdjuntos,
   nucleo,
   type Categoria,
   type DetalleEntrada,
@@ -82,12 +77,9 @@ export function VistaEntradas({
   const presentes = CATEGORIAS.filter((c) => filas.some((f) => f.categoria === c.valor));
 
   async function borrar(id: string) {
-    // Se leen antes de borrar: después la entrada ya no dice qué documentos tenía.
-    const documentos = detalle?.item.id === id ? leerAdjuntos(detalle.item.custom) : [];
     const { filas: nuevas, fichero } = await nucleo.borrar(id);
     setSeleccion(null);
     alCambiar(nuevas, fichero);
-    for (const d of documentos) await almacenAdjuntos.borrar(d.id).catch(() => undefined);
   }
 
   return (
@@ -157,11 +149,9 @@ export function VistaEntradas({
       {creando && (
         <Formulario
           alCerrar={() => setCreando(false)}
-          alGuardar={(nuevas, fichero, id) => {
+          alGuardar={(nuevas, fichero) => {
             setCreando(false);
             alCambiar(nuevas, fichero);
-            // Se abre la ficha nueva: es donde se añaden los documentos.
-            setSeleccion(id);
           }}
         />
       )}
@@ -226,8 +216,6 @@ export function VistaEntradas({
                     ) : (
                       <Detalle
                         detalle={detalle}
-                        alCambiar={alCambiar}
-                        alRefrescar={() => void cargarDetalle(fila.id)}
                         alEditar={() => setEditando(true)}
                         alBorrar={() => void borrar(detalle.item.id)}
                       />
@@ -246,14 +234,10 @@ export function VistaEntradas({
 /** Ficha abierta de una entrada, con el secreto tapado hasta que se pide. */
 function Detalle({
   detalle,
-  alCambiar,
-  alRefrescar,
   alEditar,
   alBorrar,
 }: {
   readonly detalle: DetalleEntrada;
-  readonly alCambiar: (filas: FilaEntrada[], fichero: Uint8Array) => void;
-  readonly alRefrescar: () => void;
   readonly alEditar: () => void;
   readonly alBorrar: () => void;
 }) {
@@ -361,8 +345,6 @@ function Detalle({
         </span>
       </div>
 
-      <Adjuntos item={item} alCambiar={alCambiar} alRefrescar={alRefrescar} />
-
       <div className="barra-acciones ficha-pie">
         <button className="boton principal" onClick={alEditar}>
           Editar
@@ -400,7 +382,7 @@ function Formulario({
 }: {
   readonly entrada?: DetalleEntrada;
   readonly alCerrar: () => void;
-  readonly alGuardar: (filas: FilaEntrada[], fichero: Uint8Array, id: string) => void;
+  readonly alGuardar: (filas: FilaEntrada[], fichero: Uint8Array) => void;
 }) {
   const previo = entrada?.item;
   const [tipo, setTipo] = useState<VaultItemType>(previo?.type ?? "login");
@@ -442,13 +424,10 @@ function Formulario({
           .filter((e) => e.length > 0),
         custom: { ...previo?.custom, categoria },
       };
-      if (previo) {
-        const { filas, fichero } = await nucleo.actualizar(previo.id, draft);
-        alGuardar(filas, fichero, previo.id);
-      } else {
-        const { filas, fichero, id } = await nucleo.anadir(draft);
-        alGuardar(filas, fichero, id);
-      }
+      const { filas, fichero } = previo
+        ? await nucleo.actualizar(previo.id, draft)
+        : await nucleo.anadir(draft);
+      alGuardar(filas, fichero);
     } catch (error) {
       setFallo(error instanceof Error ? error.message : String(error));
       setGuardando(false);
@@ -543,12 +522,6 @@ function Formulario({
           </button>
         </div>
       </div>
-
-      {!previo && (
-        <p className="prosa" style={{ fontSize: 13.5, marginBottom: 16 }}>
-          Los documentos (PDF, fotos) se añaden desde la ficha, en cuanto guardes la entrada.
-        </p>
-      )}
 
       <label className="campo">
         <span className="etiqueta">Notas</span>
@@ -1066,116 +1039,8 @@ export function VistaFichero({
             Olvidar en este navegador
           </button>
         </div>
-        <p className="prosa" style={{ marginTop: 14, fontSize: 13.5 }}>
-          «Olvidar» borra también los documentos guardados en este navegador.
-        </p>
       </div>
-
-      <CopiaDocumentos />
     </>
-  );
-}
-
-/**
- * Los documentos no viajan dentro del `.cerbero`: sin su propia copia, cambiar
- * de móvil o limpiar el navegador los perdería aunque la bóveda se recuperase.
- */
-function CopiaDocumentos() {
-  const [resumen, setResumen] = useState<{ cuantos: number; bytes: number } | null>(null);
-  const [nota, setNota] = useState<{ tipo: "jade" | "alarma"; texto: string } | null>(null);
-  const [trabajando, setTrabajando] = useState(false);
-  const entrada = useRef<HTMLInputElement>(null);
-
-  async function medir() {
-    try {
-      const todos = await almacenAdjuntos.todos();
-      setResumen({ cuantos: todos.length, bytes: todos.reduce((n, d) => n + d.sealed.length, 0) });
-    } catch {
-      setResumen(null);
-    }
-  }
-
-  useEffect(() => {
-    void medir();
-  }, []);
-
-  async function exportar() {
-    setTrabajando(true);
-    setNota(null);
-    try {
-      const todos = await almacenAdjuntos.todos();
-      if (todos.length === 0) {
-        setNota({ tipo: "alarma", texto: "No hay ningún documento guardado en este navegador." });
-        return;
-      }
-      descargar(packAttachments(todos), "documentos.cerbero-docs");
-      setNota({
-        tipo: "jade",
-        texto: `Copia de ${todos.length} documento${todos.length === 1 ? "" : "s"} descargada. Va cifrada: sin tu bóveda no se puede leer.`,
-      });
-    } catch (error) {
-      setNota({ tipo: "alarma", texto: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setTrabajando(false);
-    }
-  }
-
-  async function restaurar(evento: React.ChangeEvent<HTMLInputElement>) {
-    const elegido = evento.target.files?.[0];
-    evento.target.value = "";
-    if (!elegido) return;
-    setTrabajando(true);
-    setNota(null);
-    try {
-      const paquete = unpackAttachments(new Uint8Array(await elegido.arrayBuffer()));
-      for (const d of paquete) await almacenAdjuntos.guardar(d.id, d.sealed);
-      setNota({
-        tipo: "jade",
-        texto: `Restaurados ${paquete.length} documento${paquete.length === 1 ? "" : "s"}.`,
-      });
-      await medir();
-    } catch (error) {
-      setNota({ tipo: "alarma", texto: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setTrabajando(false);
-    }
-  }
-
-  return (
-    <div className="panel">
-      <div className="panel-titulo">
-        <h2 style={{ fontSize: 17 }}>Documentos</h2>
-        <span className="dato" style={{ color: "var(--texto-tenue)" }}>
-          {resumen ? `${resumen.cuantos} · ${formatearBytes(resumen.bytes)}` : "—"}
-        </span>
-      </div>
-      <p className="prosa" style={{ marginBottom: 14 }}>
-        Los PDF y las fotos van cifrados aparte y <strong>no están dentro del fichero de la
-        bóveda</strong>. Descarga también su copia: sin ella, recuperar la bóveda en otro
-        dispositivo te devuelve las entradas pero no los documentos.
-      </p>
-      {nota && (
-        <div className={`aviso ${nota.tipo}`}>
-          <span className="glifo">{nota.tipo === "jade" ? "✓" : "!"}</span>
-          <span>{nota.texto}</span>
-        </div>
-      )}
-      <div className="barra-acciones">
-        <button className="boton principal" disabled={trabajando} onClick={() => void exportar()}>
-          Descargar copia de los documentos
-        </button>
-        <button className="boton" disabled={trabajando} onClick={() => entrada.current?.click()}>
-          Restaurar documentos…
-        </button>
-        <input
-          ref={entrada}
-          type="file"
-          accept=".cerbero-docs,application/octet-stream"
-          onChange={(e) => void restaurar(e)}
-          style={{ display: "none" }}
-        />
-      </div>
-    </div>
   );
 }
 

@@ -87,43 +87,6 @@ Un fallo de contraseña y una ranura vacía producen exactamente el mismo error,
 el mismo mensaje. Esa indistinguibilidad no es cosmética: es lo que impide
 convertir el desbloqueo en un oráculo que cuente bóvedas.
 
-## Documentos adjuntos
-
-PDF y fotos (DNI, escrituras) **no viven en la ranura**. La ranura es de tamaño
-fijo —256 KiB por defecto— y tiene que seguir siéndolo: agrandarla a decenas de
-MiB multiplicaría por el número de ranuras el peso del fichero y obligaría a
-reescribirlo entero en cada guardado.
-
-Cada documento se cifra por separado (`packages/vault/src/adjuntos.ts`):
-
-- Clave propia: `HKDF(VDK, "attachment-key", idDocumento)`. Etiqueta distinta a la
-  de los ítems, de modo que un identificador repetido nunca da la misma clave.
-- XChaCha20-Poly1305 con `aad = H(vaultId ‖ idDocumento)`: no se copia a otra
-  bóveda ni se intercambia por otro documento.
-- Relleno al cubo de los ítems (múltiplos de 64 KiB por encima de 64 KiB), así que
-  el tamaño del criptograma no delata el del original. Tope de 20 MiB por
-  documento, porque se cifra de una vez.
-
-La entrada solo guarda la **referencia** (id, nombre, tipo, tamaño) en
-`custom.adjuntos`, que viaja cifrada dentro de la ranura. El criptograma se
-guarda en el almacén `adjuntos` de IndexedDB, indexado por ese id.
-
-Las fotos se re-codifican como JPEG antes de cifrar, lo que elimina el EXIF
-(ubicación GPS, modelo del aparato, hora). Los PDF pasan tal cual.
-
-### Lo que este diseño no da
-
-- **El `.cerbero` no contiene los documentos.** Tienen su propia copia
-  (`.cerbero-docs`, los mismos criptogramas empaquetados) y hay que hacerla.
-- **La negación plausible no se extiende a los documentos.** El almacén no
-  distingue ranuras: si una bóveda de coacción no referencia ningún documento pero
-  el navegador guarda varios blobs, quien inspeccione el navegador sabe que hay
-  documentos de alguna bóveda. No revelan de cuál ni qué contienen, pero sí que
-  existen.
-- Al ver una foto, sus bytes pasan a un URI de datos, que es una cadena de
-  JavaScript y no se puede borrar de memoria (la política de seguridad de la
-  página solo admite imágenes `data:`).
-
 ## Los cinco paquetes
 
 | Paquete | Responsabilidad | Idea central |

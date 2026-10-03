@@ -1,5 +1,4 @@
 /// <reference lib="webworker" />
-import { escribirAdjuntos, leerAdjuntos, type Adjunto } from "./adjuntos.ts";
 import {
   SecretBuffer,
   webauthnPrfSalt,
@@ -903,41 +902,6 @@ const operaciones: Record<string, (carga: never) => unknown> = {
     factorActual = factor ? Uint8Array.from(factor) : null;
     anotar("policy-changed", factor ? "llave-vinculada" : "llave-desvinculada");
     return { fichero: ficheroActual, vinculada: factorActual !== null };
-  },
-
-  /**
-   * Cifra un documento sin tocar todavía la bóveda.
-   *
-   * Son dos pasos a propósito: primero se cifra y quien llama lo guarda, y solo
-   * entonces se anota la referencia en la entrada. Al revés, un fallo al
-   * guardar dejaría una entrada apuntando a un documento que no existe.
-   */
-  prepararAdjunto: ({ bytes }: { bytes: Uint8Array }) => exigirAbierta().sealAttachment(bytes),
-
-  registrarAdjunto: ({ itemId, adjunto }: { itemId: string; adjunto: Adjunto }) => {
-    const v = exigirAbierta();
-    const item = v.get(itemId);
-    if (!item) throw new Error("esa entrada ya no existe");
-    const lista = [...leerAdjuntos(item.custom), adjunto];
-    v.update(itemId, { custom: { ...item.custom, adjuntos: escribirAdjuntos(lista) } });
-    anotar("item-updated", itemId);
-    return { fichero: serializar(), filas: listar() };
-  },
-
-  abrirAdjunto: ({ id, sealed }: { id: string; sealed: Uint8Array }) => {
-    const bytes = exigirAbierta().openAttachment(id, sealed);
-    anotar("item-read", id);
-    return { bytes };
-  },
-
-  quitarAdjunto: ({ itemId, id }: { itemId: string; id: string }) => {
-    const v = exigirAbierta();
-    const item = v.get(itemId);
-    if (!item) throw new Error("esa entrada ya no existe");
-    const lista = leerAdjuntos(item.custom).filter((a) => a.id !== id);
-    v.update(itemId, { custom: { ...item.custom, adjuntos: escribirAdjuntos(lista) } });
-    anotar("item-updated", itemId);
-    return { fichero: serializar(), filas: listar() };
   },
 
   cerrar: () => {
