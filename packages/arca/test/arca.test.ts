@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AeadError, SecretBuffer, concatBytes, randomBytes, toHex } from "@cerbero/crypto";
 import {
   CABECERA_LENGTH,
+  CATEGORIAS_BASE,
   CajaBloqueadaError,
   CajaFormatoError,
   CajaPasswordError,
@@ -28,8 +29,9 @@ const nueva = () => crearCaja(clave(), { perfil: "test" });
 
 function indiceCon(n: number): Indice {
   return {
-    version: 1,
+    version: 2,
     revision: n,
+    categorias: CATEGORIAS_BASE,
     documentos: Array.from({ length: n }, (_, i) => ({
       id: nuevoIdDocumento(),
       nombre: `documento-${i}.pdf`,
@@ -186,7 +188,7 @@ describe("índice", () => {
     expect(() => leerIndice(con([{ ...base, tam: MAX_DOCUMENTO + 1 }]))).toThrow(/tamaño/);
     expect(() => leerIndice(con([{ ...base, nombre: undefined }]))).toThrow(/nombre/);
     expect(() => leerIndice("{")).toThrow(/JSON/);
-    expect(() => leerIndice(JSON.stringify({ version: 2, revision: 0, documentos: [] }))).toThrow(
+    expect(() => leerIndice(JSON.stringify({ version: 3, revision: 0, documentos: [] }))).toThrow(
       /versión/,
     );
   });

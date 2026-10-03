@@ -48,7 +48,22 @@ export interface Cabecera {
   readonly sobre: Uint8Array;
 }
 
-function perfilPara(timeCost: number, memoryKiB: number, parallelism: number): Argon2Profile {
+/**
+ * ¿Son razonables los parámetros de Argon2 que trae un fichero? Se comprueba
+ * antes de gastar un solo byte en ellos. Lo usan también los envíos cifrados.
+ */
+export function argon2Razonable(timeCost: number, memoryKiB: number, parallelism: number): boolean {
+  return (
+    timeCost >= 1 &&
+    timeCost <= MAX_TIME_COST &&
+    memoryKiB >= MIN_MEMORY_KIB &&
+    memoryKiB <= MAX_MEMORY_KIB &&
+    parallelism >= 1 &&
+    parallelism <= MAX_PARALLELISM
+  );
+}
+
+export function perfilPara(timeCost: number, memoryKiB: number, parallelism: number): Argon2Profile {
   for (const candidato of Object.values(ARGON2_PROFILES)) {
     if (
       candidato.timeCost === timeCost &&
@@ -108,14 +123,7 @@ export function leerCabecera(bytes: Uint8Array): Cabecera {
   const timeCost = lector.takeUint32();
   const memoryKiB = lector.takeUint32();
   const parallelism = lector.takeUint32();
-  if (
-    timeCost < 1 ||
-    timeCost > MAX_TIME_COST ||
-    memoryKiB < MIN_MEMORY_KIB ||
-    memoryKiB > MAX_MEMORY_KIB ||
-    parallelism < 1 ||
-    parallelism > MAX_PARALLELISM
-  ) {
+  if (!argon2Razonable(timeCost, memoryKiB, parallelism)) {
     throw new CajaFormatoError("parámetros de Argon2 fuera de rango");
   }
   const sal = Uint8Array.from(lector.take(SALT_LENGTH));

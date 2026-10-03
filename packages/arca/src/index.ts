@@ -6,7 +6,14 @@
  * `@cerbero/crypto`, que es el único paquete autorizado a tocar criptografía.
  */
 
-export { CajaBloqueadaError, CajaFormatoError, CajaPasswordError } from "./errores.ts";
+export {
+  CajaBloqueadaError,
+  CajaFormatoError,
+  CajaPasswordError,
+  CategoriaError,
+  CompartidoCodigoError,
+  CompartidoFormatoError,
+} from "./errores.ts";
 
 export {
   ARCA_MAGIC,
@@ -23,6 +30,19 @@ export type { OpcionesCrear } from "./caja.ts";
 export { MAX_DOCUMENTO, abrirIndice, indiceVacio, leerIndice, sellarIndice } from "./indice.ts";
 export type { DocumentoMeta, Indice } from "./indice.ts";
 
+export {
+  CATEGORIAS_BASE,
+  CATEGORIA_RESERVA,
+  MAX_CATEGORIAS,
+  MAX_NOMBRE_CATEGORIA,
+  conCategoriaNueva,
+  conCategoriaRenombrada,
+  existeCategoria,
+  normalizarNombreCategoria,
+  sinCategoria,
+} from "./categorias.ts";
+export type { Categoria } from "./categorias.ts";
+
 export { MAX_SELLADO, SOBRECARGA_TROZO, TROZO, tamanoSellado } from "./documento.ts";
 export type { OpcionesTrozo } from "./documento.ts";
 
@@ -36,3 +56,25 @@ export {
   prefijoDocumento,
 } from "./paquete.ts";
 export type { LectorAleatorio, PaqueteInspeccionado, RegistroPaquete } from "./paquete.ts";
+
+export {
+  COMPARTIDO_MAGIC,
+  COMPARTIDO_VERSION,
+  ConstructorEnvio,
+  Envio,
+  LONGITUD_CODIGO,
+  MAX_COMPARTIDO_BYTES,
+  MAX_COMPARTIDO_DOCUMENTOS,
+  abrirEnvio,
+  generarCodigo,
+  inspeccionarEnvio,
+  normalizarCodigo,
+} from "./compartir.ts";
+export type {
+  ArchivoParaEnviar,
+  DocumentoCompartido,
+  EnvioInspeccionado,
+  Manifiesto,
+  OpcionesEnvio,
+  RegistroEnvio,
+} from "./compartir.ts";

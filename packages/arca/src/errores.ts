@@ -25,3 +25,29 @@ export class CajaBloqueadaError extends CerberoError {
     super("la caja está bloqueada");
   }
 }
+
+/**
+ * Una operación sobre las carpetas que no se puede hacer: nombre repetido,
+ * carpeta que no existe, última que queda… El mensaje se enseña tal cual al
+ * usuario, así que está escrito para él.
+ */
+export class CategoriaError extends CerberoError {}
+
+/** El fichero no tiene la forma de un envío cifrado de Arca. */
+export class CompartidoFormatoError extends CerberoError {
+  constructor(message = "el fichero no tiene el formato de un envío de Arca") {
+    super(message);
+  }
+}
+
+/**
+ * El código no abre el envío.
+ *
+ * Código equivocado y fichero alterado son indistinguibles a propósito, por lo
+ * mismo que en `CajaPasswordError`.
+ */
+export class CompartidoCodigoError extends CerberoError {
+  constructor() {
+    super("código incorrecto, o el fichero está alterado");
+  }
+}
