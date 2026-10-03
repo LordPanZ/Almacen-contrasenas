@@ -10,6 +10,7 @@ export default defineConfig({
     alias: {
       "@cerbero/crypto": pkg("crypto"),
       "@cerbero/vault": pkg("vault"),
+      "@cerbero/arca": pkg("arca"),
       "@cerbero/ledger": pkg("ledger"),
       "@cerbero/guardians": pkg("guardians"),
       "@cerbero/sentinel": pkg("sentinel"),

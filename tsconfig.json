@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/crypto" },
     { "path": "packages/vault" },
+    { "path": "packages/arca" },
     { "path": "packages/ledger" },
     { "path": "packages/guardians" },
     { "path": "packages/sentinel" },

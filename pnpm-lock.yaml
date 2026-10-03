@@ -110,6 +110,12 @@ importers:
         specifier: ^6.0.7
         version: 6.4.3(@types/node@22.20.1)
 
+  packages/arca:
+    dependencies:
+      '@cerbero/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+
   packages/crypto:
     dependencies:
       '@noble/ciphers':
