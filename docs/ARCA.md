@@ -92,6 +92,100 @@ Las **fotos** se re-codifican antes de cifrar (JPEG, o PNG si lo eran), lo que
 elimina el EXIF: ubicación GPS, modelo del móvil y hora. Es una casilla marcada
 por defecto en la hoja de añadir. Los PDF y el resto de archivos pasan tal cual.
 
+## Carpetas
+
+La caja se organiza en carpetas: cada documento está en exactamente una. Nacen
+nueve (Identidad, Vivienda, Vehículo, Seguros, Salud, Finanzas, Trabajo y
+estudios, Legal y familia, Otros) y el usuario puede **crear las suyas**,
+renombrarlas y borrarlas, también al subir un documento ("＋ Nueva carpeta…").
+
+- La lista de carpetas **va dentro del índice cifrado**, igual que los nombres de
+  los documentos: desde fuera no se ve ni cómo se llaman ni cuántas hay.
+- Los documentos apuntan a su carpeta por **identificador**, no por nombre:
+  renombrar una carpeta no toca ningún documento.
+- Borrar una carpeta **nunca borra documentos**: si los tiene, hay que elegir a
+  qué carpeta pasan, y todo ocurre en un solo guardado del índice. Tiene que
+  quedar siempre al menos una.
+- Dos carpetas no pueden llamarse igual, aunque cambien las mayúsculas o los
+  acentos («Vehículo» y «vehiculo» son la misma).
+- El almacenamiento físico **no** se organiza en carpetas: sigue siendo una lista
+  plana de criptogramas con identificador aleatorio. La estructura existe solo
+  dentro del cifrado.
+
+**Versión del índice.** Las carpetas son la versión 2 del índice. Una caja creada
+con la versión 1 se abre sin más: sus carpetas son las nueve de siempre, con los
+mismos identificadores que ya usaban sus documentos, y el índice se guarda como
+versión 2 la primera vez que algo cambia. Un documento que apuntara a una carpeta
+inexistente no impide abrir la caja: pasa a «Otros». Rechazar el índice entero
+por un campo suelto dejaría al usuario fuera de todo por un fallo que no es suyo.
+A la inversa, una copia hecha con la versión nueva no se abre con una versión
+anterior de la app.
+
+## Compartir
+
+Arca no tiene servidor, así que **compartir es pasar un fichero** por el canal
+que se quiera. Hay dos caminos y la app los distingue con todas las letras,
+porque no son equivalentes.
+
+### Envío cifrado con un código
+
+Un fichero `.arcashare` con uno o varios documentos (hasta 50, 200 MiB en total)
+que solo abre un **código** que se genera al crearlo:
+
+```
+"ARCASHR1" | versión(2) | argon2: t,m,p (12) | sal(32) | envíoId(16)
+u32 len | manifiesto cifrado
+{ u32 len | documento cifrado } × n
+```
+
+- **El código es de azar, no una contraseña elegida**: 20 símbolos del alfabeto
+  de Crockford (sin I, L, O ni U, para poder dictarlo por teléfono), es decir,
+  **100 bits** generados por el navegador y mostrados en grupos de cinco. Un
+  fichero que viaja por una mensajería queda en sus servidores y en las copias de
+  quien lo recibe; con una contraseña humana, esa copia sería un blanco de
+  ataque sin conexión. Con 100 bits no hay nada que adivinar. Argon2id (perfil
+  `interactive`) queda como cinturón y tirantes.
+- **Fichero y código por canales distintos.** Es la parte que no puede resolver
+  la criptografía: si viajan juntos por el mismo canal, quien lo intercepte tiene
+  las dos cosas.
+- **Dentro del cifrado** van los nombres, los tipos y los tamaños reales. Fuera
+  solo se ve que es un envío de Arca, el coste de derivación, la sal y los
+  tamaños de los documentos, que caen en cubos igual que en la caja. El nombre
+  del fichero es genérico (`arca-AAAA-MM-DD.arcashare`): nunca el del documento.
+- **Cada documento va por trozos de 1 MiB** con datos autenticados que atan el
+  envío, la posición del documento, la del trozo y si es el último: reordenar,
+  repetir, recortar o mezclar trozos de otro envío falla la autenticación. El
+  manifiesto —que anuncia cuántos documentos hay y cuánto mide cada uno— va
+  atado a la cabecera entera, así que un envío al que quitan o añaden un
+  documento se detecta.
+- **El destinatario no necesita una caja.** En la portada hay «Abrir un envío
+  cifrado…»: elige el fichero, escribe el código y puede ver las fotos y
+  descargar lo que trae. Si tiene la caja abierta, además puede guardarlo en la
+  carpeta que quiera. Al elegir el fichero se valida su estructura **antes de
+  pedir el código** y sin descifrar nada.
+- **Los parámetros de Argon2 del fichero se acotan** antes de usarlos, como en la
+  caja: dos bytes alterados no pueden hacer que abrirlo intente reservar
+  terabytes.
+
+### Sin cifrar
+
+El archivo sale tal cual por la hoja de compartir del sistema (WhatsApp, correo,
+AirDrop). Es lo cómodo, pero **sale de Arca**: la aplicación que lo reciba guarda
+una copia que Arca ya no puede proteger ni borrar. Se prepara primero y se envía
+con un segundo toque, porque `navigator.share` exige que lo dispare directamente
+el usuario y en algunos móviles descifrar *después* del toque deja caducar el
+permiso. Si el navegador no puede compartir archivos, se ofrece descargarlos.
+
+### Lo que un envío no puede hacer
+
+- **No se puede revocar.** Quien tenga el fichero y el código lo abrirá siempre.
+- **Quien lo abre puede guardarlo en claro.** Un envío protege el camino, no la
+  confianza en el destinatario. No hay forma técnica de impedir que alguien
+  copie lo que ya ha visto.
+- **No caduca.** No hay reloj de confianza en un fichero sin servidor.
+- **Un envío no es una conversación.** No hay acuse de recibo ni forma de saber
+  si se abrió.
+
 ## Copia de seguridad (`.arca`)
 
 Un solo fichero con la cabecera, el índice y todos los documentos, cifrados. No
@@ -124,6 +218,75 @@ en memoria.
 - Si el índice menciona un documento que el navegador no tiene (una copia
   incompleta), la lista lo marca en lugar de fallar al abrirlo.
 
+## Arca frente a Cerbero: qué defensas tiene y cuáles no
+
+**Arca no tiene todas las defensas de Cerbero, y ninguna de las dos es
+«inexpugnable»**: esa palabra no describe nada real, y decirla sería mentir. Son
+aplicaciones con amenazas distintas, y Arca tiene menos capas.
+
+| Defensa | Cerbero | Arca |
+| --- | :---: | :---: |
+| Cifrado autenticado XChaCha20-Poly1305 | ✔ | ✔ |
+| Contraseña → clave con Argon2id (coste a elegir) | ✔ | ✔ |
+| Clave de datos aleatoria con envoltorio: cambiar la contraseña no recifra | ✔ | ✔ |
+| Metadatos (nombres, tipos, carpetas) dentro del cifrado y relleno por cubos | ✔ | ✔ |
+| Sin red: política de seguridad `connect-src 'none'` | ✔ | ✔ |
+| Cifrado por trozos con datos autenticados (contra reordenar o recortar) | n/a | ✔ |
+| Bloqueo automático por inactividad | — | ✔ |
+| Quitar ubicación y datos del móvil de las fotos | n/a | ✔ |
+| Segundo factor con llave de seguridad (WebAuthn PRF) | ✔ | — |
+| Negación plausible: ranuras indistinguibles y bóvedas de coacción | ✔ | — |
+| Tamaño fijo del fichero: no revela cuánto guardas | ✔ | — |
+| Recuperación social (Shamir) y herencia con cerradura temporal | ✔ | — |
+| Credenciales trampa que avisan si alguien entra | ✔ | n/a |
+| Criptografía de clave pública post-cuántica (X-Wing, ML-DSA) | ✔ | n/a |
+| Registro Merkle contra reversión del historial | parcial | — |
+| Auditoría independiente | — | — |
+
+**Lo que Arca sí protege tan bien como Cerbero** es lo principal: *el fichero que
+alguien se lleve*. Los dos usan las mismas primitivas, y con una contraseña larga
+y de azar atacar el fichero robado no es viable. Lo que decide ahí no es el
+programa sino la contraseña.
+
+**Sobre lo post-cuántico.** Arca no usa criptografía de clave pública, así que no
+tiene el punto débil que protege X-Wing en Cerbero: nada de lo guardado se
+cifra con una clave que un ordenador cuántico pudiera deducir de una pública. Con
+claves simétricas de 256 bits, Grover las deja en unos 128 bits de seguridad,
+que sigue siendo inalcanzable. El eslabón débil vuelve a ser la contraseña.
+
+**Dónde Arca es más débil que Cerbero:**
+
+- **Solo la contraseña.** Sin segundo factor, quien la consiga y tenga el
+  fichero lo abre. Es la mejora de mayor valor que le falta (se puede añadir con
+  la misma técnica que Cerbero, WebAuthn PRF).
+- **Sin negación plausible.** Un fichero de tamaño variable y una caja visible no
+  permiten decir «aquí no hay nada». Es una decisión de diseño: documentos de
+  decenas de MiB y ranuras de tamaño fijo no pueden convivir.
+- **Sin recuperación ni herencia.** Perder la contraseña sin copia es perder los
+  documentos.
+- **Compartir abre una puerta por diseño.** Un envío cifrado protege el camino y
+  el sin cifrar no protege nada: ver la sección anterior.
+
+**Dónde las dos son igual de débiles** (y es donde de verdad se pierden los
+secretos):
+
+- **Quien sirve el código.** Cada visita, el sitio entrega el código que
+  descifra. Quien controle la cuenta de Netlify puede servir una versión
+  modificada que se lleve la contraseña la próxima vez que se escriba, y la
+  política de seguridad viaja en la misma respuesta, así que no lo impide.
+  La defensa es protegerla: verificación en dos pasos en Netlify y pocos
+  accesos. Cerbero tiene además la salida de abrir el fichero HTML descargado, sin
+  conexión; Arca no, porque necesita una dirección estable para guardar datos.
+- **El dispositivo.** Un móvil con malware, una extensión maliciosa o alguien
+  con el móvil desbloqueado y Arca abierta no se frenan con criptografía. El
+  bloqueo automático acota el último caso.
+- **La contraseña.** Es el único punto donde la seguridad depende de una persona.
+  Una frase de seis palabras al azar, o 16 caracteres aleatorios, y el perfil
+  «Recomendado» o «Máxima protección» al crear la caja.
+- **Que no se ha auditado.** Ninguna de las dos ha pasado una revisión
+  independiente. El código es público y los tests son abundantes, pero eso no es
+  lo mismo.
+
 ## Qué no cubre
 
 - **No ha pasado una auditoría independiente.** Lo mismo que Cerbero.
@@ -132,6 +295,9 @@ en memoria.
   pretende ocultar su existencia, solo su contenido.
 - **Sin recuperación.** Perder la contraseña y no tener copia es perder los
   documentos. Es el precio de que nadie más pueda abrirlos.
+- **Un envío no se revoca.** Y quien lo abre puede guardarlo sin cifrar. Un
+  envío con fichero y código por el mismo canal no protege nada. Un envío sin
+  cifrar deja una copia en WhatsApp, el correo o donde se mande.
 - **Quien sirve el código es de fiar.** Cada visita, el sitio entrega el código
   que descifra. La política de seguridad del despliegue (`connect-src 'none'`) lo
   dificulta, pero quien controla el sitio controla las cabeceras. El fichero
