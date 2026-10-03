@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AbrirEnvio } from "./AbrirEnvio.tsx";
 import { arca } from "./puente.ts";
 import type { Biblioteca, Fuerza, PerfilArgon2 } from "./tipos.ts";
 import { Marca } from "./Marca.tsx";
@@ -70,6 +71,7 @@ export function Portada({
   const [olvido, setOlvido] = useState(false);
   const [confirmacion, setConfirmacion] = useState("");
   const [copia, setCopia] = useState<File | null>(null);
+  const [abriendoEnvio, setAbriendoEnvio] = useState(false);
   const entradaCopia = useRef<HTMLInputElement>(null);
 
   async function enviar(evento: React.FormEvent) {
@@ -228,6 +230,9 @@ export function Portada({
             <button className="enlace" onClick={() => entradaCopia.current?.click()}>
               Restaurar desde una copia…
             </button>
+            <button className="enlace" onClick={() => setAbriendoEnvio(true)}>
+              Abrir un envío cifrado…
+            </button>
             {existe && (
               <button className="enlace" onClick={() => setOlvido(!olvido)} aria-expanded={olvido}>
                 He olvidado la contraseña
@@ -280,6 +285,8 @@ export function Portada({
           </div>
         )}
       </div>
+
+      {abriendoEnvio && <AbrirEnvio alCerrar={() => setAbriendoEnvio(false)} />}
     </main>
   );
 }

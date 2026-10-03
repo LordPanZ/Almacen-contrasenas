@@ -1,6 +1,6 @@
-import type { DocumentoMeta } from "@cerbero/arca";
+import type { Categoria, DocumentoMeta } from "@cerbero/arca";
 
-export type { DocumentoMeta };
+export type { Categoria, DocumentoMeta };
 
 export interface EstadoCaja {
   /** ¿Hay una caja guardada en este navegador? */
@@ -10,6 +10,8 @@ export interface EstadoCaja {
 }
 
 export interface Biblioteca {
+  /** Las carpetas, en su orden. Cada documento está en una. */
+  readonly categorias: readonly Categoria[];
   readonly documentos: readonly DocumentoMeta[];
   /** Documentos que el índice menciona y este navegador no tiene. */
   readonly faltan: readonly string[];
@@ -38,3 +40,23 @@ export interface NuevoDocumento {
 }
 
 export type PerfilArgon2 = "interactive" | "moderate" | "paranoid";
+
+/** Un envío cifrado listo para mandar: el fichero y el código que lo abre, que se enseña una sola vez. */
+export interface EnvioCreado {
+  readonly archivo: Blob;
+  readonly nombre: string;
+  readonly codigo: string;
+  readonly documentos: number;
+}
+
+/** Lo que se sabe de un envío recibido antes de tener el código: solo que es uno válido. */
+export interface EnvioInspeccion {
+  readonly documentos: number;
+  readonly bytes: number;
+}
+
+/** Lo que hay dentro de un envío, una vez abierto con su código. */
+export interface EnvioAbierto {
+  readonly creado: number;
+  readonly documentos: readonly { readonly nombre: string; readonly mime: string; readonly tam: number }[];
+}

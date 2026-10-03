@@ -1,19 +1,23 @@
 import { useRef, useState } from "react";
 import { prepararArchivo } from "./archivos.ts";
-import { CATEGORIAS, CATEGORIA_POR_DEFECTO, comoCategoria } from "./categorias.ts";
+import { carpetaPorDefecto } from "./categorias.ts";
 import { formatearBytes } from "./formato.ts";
 import { Hoja } from "./Hoja.tsx";
 import { arca } from "./puente.ts";
-import type { Biblioteca } from "./tipos.ts";
+import { SelectorCarpeta } from "./SelectorCarpeta.tsx";
+import type { Biblioteca, Categoria } from "./tipos.ts";
 
 const CLAVE_CATEGORIA = "arca.categoria";
 
-function ultimaCategoria(): string {
+/** La última carpeta elegida, si todavía existe; si no, la de siempre. */
+function ultimaCarpeta(categorias: readonly Categoria[]): string {
   try {
-    return comoCategoria(localStorage.getItem(CLAVE_CATEGORIA) ?? "");
+    const guardada = localStorage.getItem(CLAVE_CATEGORIA) ?? "";
+    if (categorias.some((c) => c.id === guardada)) return guardada;
   } catch {
-    return CATEGORIA_POR_DEFECTO;
+    /* sin almacenamiento: se usa la de por defecto */
   }
+  return carpetaPorDefecto(categorias);
 }
 
 interface Resultado {
@@ -23,16 +27,19 @@ interface Resultado {
 }
 
 export function Anadir({
-  categoriaInicial,
+  categorias,
+  carpetaInicial,
   alCambiar,
   alCerrar,
 }: {
-  readonly categoriaInicial: string | undefined;
+  readonly categorias: readonly Categoria[];
+  /** Si se añade desde dentro de una carpeta, esa es la carpeta. */
+  readonly carpetaInicial: string | undefined;
   readonly alCambiar: (biblioteca: Biblioteca) => void;
   readonly alCerrar: () => void;
 }) {
   const [archivos, setArchivos] = useState<File[]>([]);
-  const [categoria, setCategoria] = useState<string>(categoriaInicial ?? ultimaCategoria());
+  const [categoria, setCategoria] = useState<string>(carpetaInicial ?? ultimaCarpeta(categorias));
   const [quitarMetadatos, setQuitarMetadatos] = useState(true);
   const [progreso, setProgreso] = useState<{ hecho: number; total: number; actual: string } | null>(null);
   const [resultados, setResultados] = useState<Resultado[] | null>(null);
@@ -145,16 +152,14 @@ export function Anadir({
                 ))}
               </ul>
 
-              <label className="campo">
-                <span className="etiqueta">Categoría</span>
-                <select value={categoria} onChange={(e) => setCategoria(e.target.value)} disabled={ocupado}>
-                  {CATEGORIAS.map((c) => (
-                    <option key={c.valor} value={c.valor}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <SelectorCarpeta
+                categorias={categorias}
+                valor={categoria}
+                alElegir={setCategoria}
+                alCambiarBiblioteca={alCambiar}
+                deshabilitado={ocupado}
+                etiqueta="Guardar en la carpeta"
+              />
 
               <label className="casilla">
                 <input

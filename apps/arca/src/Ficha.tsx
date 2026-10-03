@@ -1,43 +1,52 @@
-import { useEffect, useState } from "react";
-import { CATEGORIAS, comoCategoria } from "./categorias.ts";
+import { useEffect, useRef, useState } from "react";
+import { Compartir } from "./Compartir.tsx";
 import { descargarBytes, esImagen, etiquetaTipo, formatearBytes, formatearFechaHora } from "./formato.ts";
 import { Hoja } from "./Hoja.tsx";
 import { arca } from "./puente.ts";
-import type { Biblioteca, DocumentoMeta } from "./tipos.ts";
+import { SelectorCarpeta } from "./SelectorCarpeta.tsx";
+import type { Biblioteca, Categoria, DocumentoMeta } from "./tipos.ts";
+import { Visor } from "./Visor.tsx";
 
 export function Ficha({
   documento,
+  categorias,
   falta,
   alCambiar,
   alCerrar,
 }: {
   readonly documento: DocumentoMeta;
+  readonly categorias: readonly Categoria[];
   readonly falta: boolean;
   readonly alCambiar: (biblioteca: Biblioteca) => void;
   readonly alCerrar: () => void;
 }) {
   const [nombre, setNombre] = useState(documento.nombre);
-  const [categoria, setCategoria] = useState<string>(comoCategoria(documento.categoria));
+  const [categoria, setCategoria] = useState<string>(documento.categoria);
   const [notas, setNotas] = useState(documento.notas);
   const [trabajando, setTrabajando] = useState<string | null>(null);
   const [fallo, setFallo] = useState<string | null>(null);
   const [nota, setNota] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
-  const [visor, setVisor] = useState<{ url: string; ampliado: boolean } | null>(null);
+  const [compartiendo, setCompartiendo] = useState(false);
+  const [visor, setVisor] = useState<string | null>(null);
+  // La URL de la imagen que se mira, para revocarla al salir aunque el visor siga abierto.
+  const urlVisor = useRef<string | null>(null);
 
   const cambiado =
-    nombre.trim() !== documento.nombre ||
-    categoria !== comoCategoria(documento.categoria) ||
-    notas !== documento.notas;
+    nombre.trim() !== documento.nombre || categoria !== documento.categoria || notas !== documento.notas;
 
-  // El visor usa una URL de objeto: se revoca al cerrarlo y al salir, para que la
-  // imagen descifrada no se quede en memoria más de lo que se está mirando.
   useEffect(
     () => () => {
-      if (visor) URL.revokeObjectURL(visor.url);
+      if (urlVisor.current) URL.revokeObjectURL(urlVisor.current);
     },
-    [visor],
+    [],
   );
+
+  function cerrarVisor() {
+    if (urlVisor.current) URL.revokeObjectURL(urlVisor.current);
+    urlVisor.current = null;
+    setVisor(null);
+  }
 
   function contar(error: unknown) {
     setFallo(error instanceof Error ? error.message : String(error));
@@ -83,7 +92,8 @@ export function Ficha({
       const { meta, datos } = await descifrar();
       const url = URL.createObjectURL(new Blob([datos], { type: meta.mime }));
       new Uint8Array(datos).fill(0);
-      setVisor({ url, ampliado: false });
+      urlVisor.current = url;
+      setVisor(url);
     } catch (error) {
       contar(error);
     } finally {
@@ -105,7 +115,7 @@ export function Ficha({
 
   return (
     <>
-      <Hoja titulo={documento.nombre} alCerrar={alCerrar} bloqueada={trabajando !== null}>
+      <Hoja titulo={documento.nombre} alCerrar={alCerrar} bloqueada={trabajando !== null || compartiendo}>
         {falta && (
           <div className="aviso alarma">
             Este documento figura en la lista pero no está en este navegador. Si restauraste una copia, comprueba que
@@ -118,16 +128,13 @@ export function Ficha({
           <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} autoCapitalize="none" />
         </label>
 
-        <label className="campo">
-          <span className="etiqueta">Categoría</span>
-          <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-            {CATEGORIAS.map((c) => (
-              <option key={c.valor} value={c.valor}>
-                {c.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SelectorCarpeta
+          categorias={categorias}
+          valor={categoria}
+          alElegir={setCategoria}
+          alCambiarBiblioteca={alCambiar}
+          deshabilitado={trabajando !== null}
+        />
 
         <label className="campo">
           <span className="etiqueta">Notas</span>
@@ -163,6 +170,9 @@ export function Ficha({
           <button className="boton" disabled={trabajando !== null || falta} onClick={() => void descargar()}>
             Descargar
           </button>
+          <button className="boton" disabled={trabajando !== null || falta} onClick={() => setCompartiendo(true)}>
+            Compartir
+          </button>
           {confirmando ? (
             <>
               <button className="boton peligro" disabled={trabajando !== null} onClick={() => void borrar()}>
@@ -180,30 +190,9 @@ export function Ficha({
         </div>
       </Hoja>
 
-      {visor && (
-        <div className={`visor${visor.ampliado ? " ampliado" : ""}`} role="dialog" aria-modal="true" aria-label={documento.nombre}>
-          <div className="visor-barra">
-            <span className="dato">{documento.nombre}</span>
-            <span className="acciones">
-              <button className="boton chico" onClick={() => setVisor({ ...visor, ampliado: !visor.ampliado })}>
-                {visor.ampliado ? "Ajustar" : "Ampliar"}
-              </button>
-              <button
-                className="boton chico"
-                onClick={() => {
-                  URL.revokeObjectURL(visor.url);
-                  setVisor(null);
-                }}
-              >
-                Cerrar
-              </button>
-            </span>
-          </div>
-          <div className="visor-lienzo">
-            <img src={visor.url} alt={documento.nombre} />
-          </div>
-        </div>
-      )}
+      {compartiendo && <Compartir documentos={[documento]} alCerrar={() => setCompartiendo(false)} />}
+
+      {visor && <Visor url={visor} nombre={documento.nombre} alCerrar={cerrarVisor} />}
     </>
   );
 }

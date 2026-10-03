@@ -1,20 +1,29 @@
 import {
   Caja,
+  ConstructorEnvio,
   abrirCaja,
+  abrirEnvio,
   cambiarPassword,
+  conCategoriaNueva,
+  conCategoriaRenombrada,
   crearCaja,
+  existeCategoria,
   indiceVacio,
+  inspeccionarEnvio,
   inspeccionarPaquete,
   nuevoIdDocumento,
   preambuloPaquete,
   prefijoDocumento,
+  sinCategoria,
   type DocumentoMeta,
+  type Envio,
+  type EnvioInspeccionado,
   type Indice,
 } from "@cerbero/arca";
-import { SecretBuffer } from "@cerbero/crypto";
+import { AeadError, SecretBuffer } from "@cerbero/crypto";
 import { estimateStrength } from "@cerbero/sentinel";
 import * as almacen from "./almacen.ts";
-import type { Biblioteca, NuevoDocumento, PerfilArgon2, Uso } from "./tipos.ts";
+import type { Biblioteca, EnvioAbierto, EnvioCreado, EnvioInspeccion, NuevoDocumento, PerfilArgon2, Uso } from "./tipos.ts";
 
 /**
  * Trabajador criptográfico de Arca.
@@ -37,15 +46,28 @@ class CajaModificadaError extends Error {
 let caja: Caja | null = null;
 let indice: Indice | null = null;
 
+/**
+ * Un envío recibido que se está mirando. Es independiente de la caja: se puede
+ * abrir sin tener ninguna, y por eso vive aparte. Guarda el fichero para leer de
+ * él documento a documento, sin cargarlo entero.
+ */
+let recibido: { archivo: Blob; inspeccion: EnvioInspeccionado; abierto: Envio | null } | null = null;
+
 function exigir(): { caja: Caja; indice: Indice } {
   if (!caja || !indice) throw new Error("La caja está bloqueada.");
   return { caja, indice };
+}
+
+function cerrarRecibido(): void {
+  recibido?.abierto?.cerrar();
+  recibido = null;
 }
 
 function cerrarInterno(): void {
   caja?.bloquear();
   caja = null;
   indice = null;
+  cerrarRecibido();
 }
 
 /** Guarda un índice nuevo comprobando que nadie más tocó el de disco. */
@@ -63,9 +85,58 @@ async function biblioteca(): Promise<Biblioteca> {
   const { indice: i } = exigir();
   const presentes = new Set(await almacen.idsDocs());
   return {
+    categorias: i.categorias,
     documentos: i.documentos,
     faltan: i.documentos.filter((d) => !presentes.has(d.id)).map((d) => d.id),
   };
+}
+
+/** Lector con acceso aleatorio sobre un `Blob`: el fichero no se carga entero en memoria. */
+const lectorDeBlob = (archivo: Blob) => ({
+  tamano: archivo.size,
+  leer: async (desde: number, cuantos: number) => new Uint8Array(await archivo.slice(desde, desde + cuantos).arrayBuffer()),
+});
+
+/** Cifra y guarda un documento en la caja abierta. Borra `bytes` en cuanto está cifrado. */
+async function guardarDocumento(
+  nombre: string,
+  mime: string,
+  categoria: string,
+  notas: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  const { caja: c, indice: i } = exigir();
+  if (!existeCategoria(i, categoria)) {
+    bytes.fill(0);
+    throw new Error("Esa carpeta ya no existe.");
+  }
+  const tam = bytes.length;
+  const id = nuevoIdDocumento();
+  let sellado: Uint8Array;
+  try {
+    sellado = c.sellarDocumento(id, bytes);
+  } finally {
+    bytes.fill(0);
+  }
+  await almacen.guardarDoc(id, sellado);
+  const ahora = Date.now();
+  const meta: DocumentoMeta = {
+    id,
+    nombre: limpiarNombre(nombre),
+    mime: mime || "application/octet-stream",
+    tam,
+    categoria,
+    notas,
+    creado: ahora,
+    actualizado: ahora,
+  };
+  try {
+    await guardarIndice({ ...i, revision: i.revision + 1, documentos: [...i.documentos, meta] });
+  } catch (error) {
+    // El documento llegó a guardarse pero nada lo referencia: se retira.
+    await almacen.borrarDoc(id).catch(() => undefined);
+    throw error;
+  }
 }
 
 function limpiarNombre(nombre: string): string {
@@ -75,6 +146,22 @@ function limpiarNombre(nombre: string): string {
 
 /** `Blob` solo admite vistas sobre `ArrayBuffer`; las nuestras nunca lo son sobre uno compartido. */
 const comoParte = (bytes: Uint8Array): BlobPart => bytes as unknown as BlobPart;
+
+/**
+ * Descifrar falla con un error de criptografía que no le dice nada al usuario.
+ * Aquí se traduce a lo que de verdad ha pasado: el criptograma está dañado o
+ * alguien lo tocó.
+ */
+function descifrando<T>(que: string, accion: () => T): T {
+  try {
+    return accion();
+  } catch (error) {
+    if (error instanceof AeadError) {
+      throw new Error(`${que} está dañado o alterado y no se puede descifrar.`);
+    }
+    throw error;
+  }
+}
 
 /** Devuelve el valor y marca qué buffers deben transferirse en vez de copiarse. */
 class Transferir<T> {
@@ -132,35 +219,8 @@ const operaciones: Record<string, (carga: never) => unknown> = {
   listar: () => biblioteca(),
 
   anadir: async ({ nombre, mime, categoria, notas, datos }: NuevoDocumento) => {
-    const { caja: c, indice: i } = exigir();
-    const bytes = new Uint8Array(datos);
-    const tam = bytes.length;
-    const id = nuevoIdDocumento();
-    let sellado: Uint8Array;
-    try {
-      sellado = c.sellarDocumento(id, bytes);
-    } finally {
-      bytes.fill(0);
-    }
-    await almacen.guardarDoc(id, sellado);
-    const ahora = Date.now();
-    const meta: DocumentoMeta = {
-      id,
-      nombre: limpiarNombre(nombre),
-      mime: mime || "application/octet-stream",
-      tam,
-      categoria,
-      notas,
-      creado: ahora,
-      actualizado: ahora,
-    };
-    try {
-      await guardarIndice({ version: 1, revision: i.revision + 1, documentos: [...i.documentos, meta] });
-    } catch (error) {
-      // El documento llegó a guardarse pero nada lo referencia: se retira.
-      await almacen.borrarDoc(id).catch(() => undefined);
-      throw error;
-    }
+    exigir();
+    await guardarDocumento(nombre, mime, categoria, notas, new Uint8Array(datos));
     return biblioteca();
   },
 
@@ -174,7 +234,7 @@ const operaciones: Record<string, (carga: never) => unknown> = {
         "Este documento no está en este navegador. Si restauraste una copia, comprueba que sea la completa.",
       );
     }
-    const bytes = c.abrirDocumento(id, sellado);
+    const bytes = descifrando(`«${meta.nombre}»`, () => c.abrirDocumento(id, sellado));
     return new Transferir({ meta, datos: bytes.buffer as ArrayBuffer }, [bytes.buffer as ArrayBuffer]);
   },
 
@@ -191,10 +251,11 @@ const operaciones: Record<string, (carga: never) => unknown> = {
   }) => {
     const { indice: i } = exigir();
     if (!i.documentos.some((d) => d.id === id)) throw new Error("Ese documento ya no existe.");
+    if (!existeCategoria(i, categoria)) throw new Error("Esa carpeta ya no existe.");
     const documentos = i.documentos.map((d) =>
       d.id === id ? { ...d, nombre: limpiarNombre(nombre), categoria, notas, actualizado: Date.now() } : d,
     );
-    await guardarIndice({ version: 1, revision: i.revision + 1, documentos });
+    await guardarIndice({ ...i, revision: i.revision + 1, documentos });
     return biblioteca();
   },
 
@@ -204,12 +265,115 @@ const operaciones: Record<string, (carga: never) => unknown> = {
     // El índice primero: si algo falla después, queda un criptograma sin dueño
     // (que se puede liberar), y no una entrada que apunta a nada.
     await guardarIndice({
-      version: 1,
+      ...i,
       revision: i.revision + 1,
       documentos: i.documentos.filter((d) => d.id !== id),
     });
     await almacen.borrarDoc(id).catch(() => undefined);
     return biblioteca();
+  },
+
+  crearCategoria: async ({ nombre }: { nombre: string }) => {
+    const { indice: i } = exigir();
+    const { indice: nuevo, categoria } = conCategoriaNueva(i, nombre);
+    await guardarIndice(nuevo);
+    return { biblioteca: await biblioteca(), categoria };
+  },
+
+  renombrarCategoria: async ({ id, nombre }: { id: string; nombre: string }) => {
+    const { indice: i } = exigir();
+    const nuevo = conCategoriaRenombrada(i, id, nombre);
+    if (nuevo !== i) await guardarIndice(nuevo);
+    return biblioteca();
+  },
+
+  borrarCategoria: async ({ id, destino }: { id: string; destino?: string }) => {
+    const { indice: i } = exigir();
+    await guardarIndice(sinCategoria(i, id, destino));
+    return biblioteca();
+  },
+
+  /**
+   * Envío cifrado de uno o varios documentos. El código se genera aquí y viaja
+   * solo hasta la pantalla que se lo enseña al usuario; no se guarda en ningún
+   * sitio.
+   */
+  compartirCifrado: async ({ ids }: { ids: string[] }): Promise<EnvioCreado> => {
+    const { caja: c, indice: i } = exigir();
+    const unicos = [...new Set(ids)];
+    if (unicos.length === 0) throw new Error("No hay nada que compartir.");
+    const constructor = ConstructorEnvio.crear({ perfil: "interactive" });
+    try {
+      for (const id of unicos) {
+        const meta = i.documentos.find((d) => d.id === id);
+        if (!meta) throw new Error("Ese documento ya no existe.");
+        const cifrado = await almacen.leerDoc(id);
+        if (!cifrado) throw new Error(`«${meta.nombre}» no está en este navegador.`);
+        const datos = descifrando(`«${meta.nombre}»`, () => c.abrirDocumento(id, cifrado));
+        try {
+          constructor.anadir({ nombre: meta.nombre, mime: meta.mime, datos });
+        } finally {
+          datos.fill(0);
+        }
+      }
+      const fecha = new Date().toISOString().slice(0, 10);
+      const partes = constructor.terminar();
+      return {
+        archivo: new Blob(partes.map(comoParte), { type: "application/octet-stream" }),
+        nombre: `arca-${fecha}.arcashare`,
+        codigo: constructor.codigo,
+        documentos: unicos.length,
+      };
+    } catch (error) {
+      constructor.cancelar();
+      throw error;
+    }
+  },
+
+  /** Primer paso al recibir un envío: comprobar que es uno y de qué tamaño, sin pedir todavía el código. */
+  envioInspeccionar: async ({ archivo }: { archivo: Blob }): Promise<EnvioInspeccion> => {
+    cerrarRecibido();
+    const inspeccion = await inspeccionarEnvio(lectorDeBlob(archivo));
+    recibido = { archivo, inspeccion, abierto: null };
+    return { documentos: inspeccion.documentos.length, bytes: archivo.size };
+  },
+
+  /** Segundo paso: abrirlo con el código. Aquí se paga el Argon2. */
+  envioAbrir: ({ codigo }: { codigo: string }): EnvioAbierto => {
+    if (!recibido) throw new Error("Elige primero el fichero del envío.");
+    recibido.abierto?.cerrar();
+    recibido.abierto = abrirEnvio(recibido.inspeccion, codigo);
+    const { manifiesto } = recibido.abierto;
+    return { creado: manifiesto.creado, documentos: manifiesto.documentos };
+  },
+
+  envioLeer: async ({ posicion }: { posicion: number }) => {
+    const abierto = recibido?.abierto;
+    if (!recibido || !abierto) throw new Error("Ese envío no está abierto.");
+    const r = abierto.registro(posicion);
+    const cifrado = new Uint8Array(await recibido.archivo.slice(r.desde, r.desde + r.tam).arrayBuffer());
+    const meta = abierto.manifiesto.documentos[posicion];
+    const bytes = descifrando(`«${meta?.nombre ?? "El documento"}» del envío`, () => abierto.abrirDocumento(posicion, cifrado));
+    return new Transferir({ meta, datos: bytes.buffer as ArrayBuffer }, [bytes.buffer as ArrayBuffer]);
+  },
+
+  /** Guarda en la caja un documento recibido. Todo ocurre aquí dentro: lo descifrado no pasa por la interfaz. */
+  envioGuardar: async ({ posicion, categoria }: { posicion: number; categoria: string }) => {
+    exigir();
+    const abierto = recibido?.abierto;
+    if (!recibido || !abierto) throw new Error("Ese envío no está abierto.");
+    const r = abierto.registro(posicion);
+    const cifrado = new Uint8Array(await recibido.archivo.slice(r.desde, r.desde + r.tam).arrayBuffer());
+    const meta = abierto.manifiesto.documentos[posicion];
+    if (!meta) throw new Error("Ese documento no está en el envío.");
+    const bytes = descifrando(`«${meta.nombre}» del envío`, () => abierto.abrirDocumento(posicion, cifrado));
+    await guardarDocumento(meta.nombre, meta.mime, categoria, "", bytes);
+    return biblioteca();
+  },
+
+  envioCerrar: () => {
+    cerrarRecibido();
+    return true;
   },
 
   uso: async (): Promise<Uso> => {

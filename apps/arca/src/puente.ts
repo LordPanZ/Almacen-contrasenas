@@ -1,12 +1,16 @@
 import ArcaWorker from "./arca.worker.ts?worker&inline";
 import type {
   Biblioteca,
+  Categoria,
+  DocumentoMeta,
+  EnvioAbierto,
+  EnvioCreado,
+  EnvioInspeccion,
   EstadoCaja,
   Fuerza,
   NuevoDocumento,
   PerfilArgon2,
   Uso,
-  DocumentoMeta,
 } from "./tipos.ts";
 
 /**
@@ -61,6 +65,19 @@ export const arca = {
   editar: (id: string, cambios: { nombre: string; categoria: string; notas: string }) =>
     llamar<Biblioteca>("editar", { id, ...cambios }),
   borrar: (id: string) => llamar<Biblioteca>("borrar", { id }),
+  crearCategoria: (nombre: string) =>
+    llamar<{ biblioteca: Biblioteca; categoria: Categoria }>("crearCategoria", { nombre }),
+  renombrarCategoria: (id: string, nombre: string) => llamar<Biblioteca>("renombrarCategoria", { id, nombre }),
+  /** Si la carpeta tiene documentos hay que decir a cuál se mueven. */
+  borrarCategoria: (id: string, destino?: string) =>
+    llamar<Biblioteca>("borrarCategoria", { id, ...(destino !== undefined ? { destino } : {}) }),
+  compartirCifrado: (ids: readonly string[]) => llamar<EnvioCreado>("compartirCifrado", { ids: [...ids] }),
+  envioInspeccionar: (archivo: Blob) => llamar<EnvioInspeccion>("envioInspeccionar", { archivo }),
+  envioAbrir: (codigo: string) => llamar<EnvioAbierto>("envioAbrir", { codigo }),
+  envioLeer: (posicion: number) =>
+    llamar<{ meta: { nombre: string; mime: string; tam: number }; datos: ArrayBuffer }>("envioLeer", { posicion }),
+  envioGuardar: (posicion: number, categoria: string) => llamar<Biblioteca>("envioGuardar", { posicion, categoria }),
+  envioCerrar: () => llamar<boolean>("envioCerrar"),
   uso: () => llamar<Uso>("uso"),
   liberar: () => llamar<boolean>("liberar"),
   cambiarPassword: (actual: string, nueva: string, perfil?: PerfilArgon2) =>
