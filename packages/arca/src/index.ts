@@ -43,6 +43,9 @@ export {
 } from "./categorias.ts";
 export type { Categoria } from "./categorias.ts";
 
+export { planearFusion } from "./fusionar.ts";
+export type { PlanFusion } from "./fusionar.ts";
+
 export { MAX_SELLADO, SOBRECARGA_TROZO, TROZO, tamanoSellado } from "./documento.ts";
 export type { OpcionesTrozo } from "./documento.ts";
 

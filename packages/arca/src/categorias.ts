@@ -66,13 +66,13 @@ export function normalizarNombreCategoria(nombre: string): string {
 }
 
 /** Con qué se comparan los nombres: «Vehículo», «vehiculo» y «VEHÍCULO » son la misma carpeta. */
-function claveNombre(nombre: string): string {
+export function claveNombreCategoria(nombre: string): string {
   return nombre.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("es");
 }
 
 function comprobarNombreLibre(categorias: readonly Categoria[], nombre: string): void {
-  const clave = claveNombre(nombre);
-  if (categorias.some((c) => claveNombre(c.nombre) === clave)) {
+  const clave = claveNombreCategoria(nombre);
+  if (categorias.some((c) => claveNombreCategoria(c.nombre) === clave)) {
     throw new CategoriaError("Ya hay una carpeta con ese nombre.");
   }
 }
