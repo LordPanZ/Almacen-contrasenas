@@ -186,6 +186,80 @@ permiso. Si el navegador no puede compartir archivos, se ofrece descargarlos.
 - **Un envío no es una conversación.** No hay acuse de recibo ni forma de saber
   si se abrió.
 
+## Varios dispositivos y varias personas
+
+La caja vive **solo en el navegador** de cada dispositivo: no hay servidor que la
+lleve a otro sitio, y esa es justo la razón de que nadie más pueda leerla. Para
+tener la misma caja en el móvil de la pareja o en el ordenador de casa hay que
+llevarla a mano.
+
+**Primera vez, en el dispositivo nuevo.** En el que ya tiene la caja:
+«Descargar copia» (pestaña *Caja*). Es un solo fichero `.arca`, cifrado: sin la
+contraseña no se abre, así que puede viajar por el canal que se quiera. En el
+dispositivo nuevo, abrir Arca en la misma dirección web, «Restaurar desde una
+copia…», y desbloquear con **la misma contraseña**. La contraseña se dice en
+persona, no junto al fichero. Es lo mismo que la copia de seguridad, y por eso
+funciona con la versión que ya está publicada.
+
+**Después, cada copia cambia por su lado.** Aquí empieza el problema: restaurar
+otra vez *sustituye* lo que hubiera, y quien lo hace pierde lo que añadió desde la
+última copia. Para eso está **«Combinar con otra copia…»**: suma a la caja
+abierta lo que traiga otra copia **de esa misma caja**, y no quita nada.
+
+Cómo funciona, y por qué no hace falta la contraseña de la copia:
+
+- Dos copias de una misma caja comparten la clave de datos, así que el índice de
+  una se abre con la clave de la otra. Eso es también lo que **demuestra que la
+  copia es de la misma caja**: el índice de una caja ajena no se abre, y uno
+  alterado falla la autenticación. Se rechazan las dos cosas.
+- Un documento es **inmutable**: mismo identificador, mismo contenido. Los
+  criptogramas que faltan se copian tal cual, sin recifrar, y **nunca se pisa
+  uno que ya esté**. Primero se copian los documentos y solo después se guarda el
+  índice, con la misma comprobación de revisión que cualquier guardado: si algo
+  falla en medio quedan criptogramas sin dueño, que se pueden liberar, nunca una
+  entrada que apunta a nada.
+- Lo único que puede diferir entre copias es **dónde está** y **cómo se llama**
+  un documento, que viven en el índice. Si se tocó en las dos, gana lo editado más
+  tarde; el contenido no cambia.
+- Una carpeta que solo está en la otra copia se añade, aunque esté vacía. Si su
+  nombre ya lo usa otra carpeta de aquí, la que llega se distingue con «(copia)».
+- Antes de aplicar se enseña exactamente qué va a entrar. Una copia incompleta
+  —que menciona documentos que no trae— no añade entradas sin contenido.
+
+**Lo que combinar no puede hacer: propagar borrados.** Un índice no guarda lo que
+ya no está, así que lo que se borró en un dispositivo y sigue en la otra copia
+**vuelve a aparecer** al combinarla. Es el precio de combinar sin servidor, y la
+pantalla lo avisa. Si algo sensible se borra, hay que borrarlo en cada
+dispositivo, y destruir las copias de seguridad viejas que lo contengan.
+
+**Si cada persona quiere su caja,** con su contraseña, en vez de una compartida:
+no se combinan; se pasan documentos concretos con un envío cifrado (ver
+*Compartir*). Quien tiene la contraseña de una caja puede leerla entera: no hay
+permisos por documento ni por persona.
+
+**La contraseña,** si se cambia en un dispositivo, solo cambia en ese: reenvuelve
+la clave de datos de esa copia y las demás siguen con la suya. Combinar no
+necesita ninguna contraseña (la clave de datos es la misma), pero conviene
+cambiarla en todos o se acaba con contraseñas distintas para la misma caja.
+
+**Un ordenador de la familia es un lugar delicado:**
+
+- Quien use ese navegador ve la pantalla de desbloqueo, y «He olvidado la
+  contraseña» permite **borrar la caja de ese navegador** a cualquiera. No toca
+  las demás copias, pero por eso conviene tener siempre una.
+- Un documento **descargado** queda **sin cifrar** en la carpeta de descargas.
+  «Ver» una imagen no escribe nada en el disco; «Descargar» sí.
+- Hay navegadores configurados para borrar los datos del sitio al cerrarse: la
+  caja desaparece. Si pasa, se restaura desde la copia.
+- Lo prudente: un usuario o perfil de navegador solo para quien usa Arca, el
+  bloqueo automático en pocos minutos y bloquear a mano al terminar.
+- El **modo privado** borra todo al cerrar la ventana: no sirve para guardar, y
+  solo valdría para consultar restaurando la copia cada vez.
+
+**Compartir la aplicación** es dar la dirección web: no contiene ningún dato, y
+cada navegador que la abre empieza vacío. En el iPhone conviene añadirla a la
+pantalla de inicio, o Safari puede borrar los datos tras siete días sin abrirla.
+
 ## Copia de seguridad (`.arca`)
 
 Un solo fichero con la cabecera, el índice y todos los documentos, cifrados. No

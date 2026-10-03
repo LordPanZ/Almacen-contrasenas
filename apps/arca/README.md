@@ -35,6 +35,10 @@ pnpm run construir:arca                         # lo prepara para publicar (dist
   (y entonces guardarlo en una carpeta).
 - **Copia de seguridad** de toda la caja en un solo fichero `.arca`, y
   restauración validada antes de escribir nada.
+- **Varios dispositivos o varias personas**: la misma caja en el móvil de la
+  pareja o en el PC de casa, llevándola por copia. **Combinar con otra copia**
+  suma lo nuevo de cualquiera de las dos sin pisar nada (borrar no se
+  propaga). Ver [docs/ARCA.md](../../docs/ARCA.md#varios-dispositivos-y-varias-personas).
 - **Cambiar la contraseña** sin recifrar los documentos.
 - **Bloqueo automático** por inactividad.
 
