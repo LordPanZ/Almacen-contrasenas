@@ -60,3 +60,13 @@ export interface EnvioAbierto {
   readonly creado: number;
   readonly documentos: readonly { readonly nombre: string; readonly mime: string; readonly tam: number }[];
 }
+
+/** Lo que traería sumar otra copia de la misma caja a la abierta. */
+export interface ResumenFusion {
+  readonly nuevos: readonly { readonly nombre: string; readonly tam: number; readonly carpeta: string }[];
+  /** Documentos que ya estaban y se editaron más tarde en la otra copia. */
+  readonly actualizados: number;
+  readonly carpetasNuevas: readonly string[];
+  /** Documentos que la copia menciona pero no trae: una copia incompleta. */
+  readonly sinContenido: number;
+}

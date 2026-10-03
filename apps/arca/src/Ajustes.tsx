@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { CombinarCopia } from "./CombinarCopia.tsx";
 import { descargarBytes, formatearBytes } from "./formato.ts";
 import { MedidorFuerza } from "./Portada.tsx";
 import { arca } from "./puente.ts";
@@ -10,12 +11,14 @@ export function Ajustes({
   alCambiarMinutos,
   alBloquear,
   alBorrado,
+  alCambiarBiblioteca,
 }: {
   readonly biblioteca: Biblioteca;
   readonly minutos: number;
   readonly alCambiarMinutos: (minutos: number) => void;
   readonly alBloquear: (aviso: string) => void;
   readonly alBorrado: () => void;
+  readonly alCambiarBiblioteca: (biblioteca: Biblioteca) => void;
 }) {
   const [uso, setUso] = useState<Uso | null>(null);
   const [protegido, setProtegido] = useState<boolean | null>(null);
@@ -26,6 +29,7 @@ export function Ajustes({
   const [nueva, setNueva] = useState("");
   const [repetida, setRepetida] = useState("");
   const [confirmacion, setConfirmacion] = useState("");
+  const [combinando, setCombinando] = useState(false);
   const entradaCopia = useRef<HTMLInputElement>(null);
 
   async function medir() {
@@ -208,6 +212,38 @@ export function Ajustes({
         )}
       </section>
 
+      <section className="panel">
+        <h2>Varios dispositivos o varias personas</h2>
+        <p className="texto">
+          Esta caja vive <strong>solo en este navegador</strong>: no hay servidor que la lleve a otro sitio. Para tener
+          la misma caja en el móvil de tu pareja o en el ordenador de casa:
+        </p>
+        <ol className="lista pasos">
+          <li>
+            <strong>Aquí:</strong> pulsa «Descargar copia» y lleva el fichero <code>.arca</code> al otro dispositivo
+            (WhatsApp, correo, un USB…). Va cifrado: sin la contraseña no se abre.
+          </li>
+          <li>
+            <strong>En el otro:</strong> abre Arca en la misma dirección, elige «Restaurar desde una copia…» y
+            selecciona el fichero.
+          </li>
+          <li>
+            Desbloquéala con <strong>la misma contraseña</strong>. Díasela en persona, no junto al fichero.
+          </li>
+        </ol>
+        <p className="texto pequeno">
+          <strong>Después, cada copia cambia por su lado.</strong> Para ponerlas al día sin pisar nada, descarga una
+          copia en un dispositivo y combínala en el otro: suma lo nuevo y no borra nada.
+        </p>
+        <button className="boton" disabled={trabajando !== null} onClick={() => setCombinando(true)}>
+          Combinar con otra copia…
+        </button>
+        <p className="texto pequeno">
+          <strong>Si es un ordenador compartido:</strong> usa un usuario o un perfil de navegador solo para ti, no dejes
+          la caja abierta y borra de «Descargas» lo que descargues: un documento descargado queda sin cifrar en el disco.
+        </p>
+      </section>
+
       <form className="panel" onSubmit={cambiarPassword}>
         <h2>Cambiar la contraseña</h2>
         <p className="texto pequeno">
@@ -287,6 +323,8 @@ export function Ajustes({
       <button className="boton ancho" onClick={() => alBloquear("Caja bloqueada.")}>
         Bloquear ahora
       </button>
+
+      {combinando && <CombinarCopia alCambiar={alCambiarBiblioteca} alCerrar={() => setCombinando(false)} />}
     </div>
   );
 }

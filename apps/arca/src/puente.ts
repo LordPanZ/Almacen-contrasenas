@@ -10,6 +10,7 @@ import type {
   Fuerza,
   NuevoDocumento,
   PerfilArgon2,
+  ResumenFusion,
   Uso,
 } from "./tipos.ts";
 
@@ -78,6 +79,9 @@ export const arca = {
     llamar<{ meta: { nombre: string; mime: string; tam: number }; datos: ArrayBuffer }>("envioLeer", { posicion }),
   envioGuardar: (posicion: number, categoria: string) => llamar<Biblioteca>("envioGuardar", { posicion, categoria }),
   envioCerrar: () => llamar<boolean>("envioCerrar"),
+  combinarInspeccionar: (archivo: Blob) => llamar<ResumenFusion>("combinarInspeccionar", { archivo }),
+  combinarAplicar: () => llamar<Biblioteca>("combinarAplicar"),
+  combinarCancelar: () => llamar<boolean>("combinarCancelar"),
   uso: () => llamar<Uso>("uso"),
   liberar: () => llamar<boolean>("liberar"),
   cambiarPassword: (actual: string, nueva: string, perfil?: PerfilArgon2) =>

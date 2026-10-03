@@ -11,7 +11,9 @@ import {
   indiceVacio,
   inspeccionarEnvio,
   inspeccionarPaquete,
+  leerCabecera,
   nuevoIdDocumento,
+  planearFusion,
   preambuloPaquete,
   prefijoDocumento,
   sinCategoria,
@@ -19,11 +21,21 @@ import {
   type Envio,
   type EnvioInspeccionado,
   type Indice,
+  type PaqueteInspeccionado,
 } from "@cerbero/arca";
-import { AeadError, SecretBuffer } from "@cerbero/crypto";
+import { AeadError, SecretBuffer, toHex } from "@cerbero/crypto";
 import { estimateStrength } from "@cerbero/sentinel";
 import * as almacen from "./almacen.ts";
-import type { Biblioteca, EnvioAbierto, EnvioCreado, EnvioInspeccion, NuevoDocumento, PerfilArgon2, Uso } from "./tipos.ts";
+import type {
+  Biblioteca,
+  EnvioAbierto,
+  EnvioCreado,
+  EnvioInspeccion,
+  NuevoDocumento,
+  PerfilArgon2,
+  ResumenFusion,
+  Uso,
+} from "./tipos.ts";
 
 /**
  * Trabajador criptográfico de Arca.
@@ -53,6 +65,13 @@ let indice: Indice | null = null;
  */
 let recibido: { archivo: Blob; inspeccion: EnvioInspeccionado; abierto: Envio | null } | null = null;
 
+/**
+ * Una copia de la misma caja que se está comparando con la abierta. Guarda el
+ * índice ya descifrado de la copia —cabe en memoria: es JSON de metadatos— y el
+ * fichero, del que se leerán los documentos que falten, uno a uno.
+ */
+let fusion: { archivo: Blob; paquete: PaqueteInspeccionado; otro: Indice } | null = null;
+
 function exigir(): { caja: Caja; indice: Indice } {
   if (!caja || !indice) throw new Error("La caja está bloqueada.");
   return { caja, indice };
@@ -67,6 +86,7 @@ function cerrarInterno(): void {
   caja?.bloquear();
   caja = null;
   indice = null;
+  fusion = null;
   cerrarRecibido();
 }
 
@@ -169,6 +189,21 @@ class Transferir<T> {
     readonly valor: T,
     readonly buffers: Transferable[],
   ) {}
+}
+
+/**
+ * Lo que hay que sumar de una copia, descontando lo que la copia menciona pero
+ * no trae (una copia incompleta): añadir al índice un documento cuyo
+ * criptograma no está sería fabricar una entrada que apunta a la nada.
+ */
+function planDeFusion(actual: Indice, f: NonNullable<typeof fusion>) {
+  const traidos = new Set(f.paquete.documentos.map((d) => d.id));
+  const propios = new Set(actual.documentos.map((d) => d.id));
+  const utiles = f.otro.documentos.filter((d) => traidos.has(d.id) || propios.has(d.id));
+  return {
+    plan: planearFusion(actual, { ...f.otro, documentos: utiles }),
+    sinContenido: f.otro.documentos.length - utiles.length,
+  };
 }
 
 const operaciones: Record<string, (carga: never) => unknown> = {
@@ -373,6 +408,67 @@ const operaciones: Record<string, (carga: never) => unknown> = {
 
   envioCerrar: () => {
     cerrarRecibido();
+    return true;
+  },
+
+  /**
+   * Primer paso de combinar: comprobar que la copia es de esta misma caja y
+   * decir qué traería, sin tocar nada. Que sea de la misma caja se sabe por su
+   * identificador y se comprueba de verdad al abrir su índice: solo se abre con
+   * la clave de datos de esta caja, así que una copia ajena o alterada falla.
+   */
+  combinarInspeccionar: async ({ archivo }: { archivo: Blob }): Promise<ResumenFusion> => {
+    const { caja: c, indice: i } = exigir();
+    fusion = null;
+    const paquete = await inspeccionarPaquete(lectorDeBlob(archivo));
+    if (toHex(leerCabecera(paquete.cabecera).cajaId) !== c.id) {
+      throw new Error(
+        "Esta copia es de otra caja, no de esta. Combinar solo sirve entre copias de la misma caja. " +
+          "Para pasar documentos de una caja a otra, usa «Compartir» y envía un envío cifrado.",
+      );
+    }
+    const otro = descifrando("El índice de esa copia", () => c.abrirIndice(paquete.indice));
+    fusion = { archivo, paquete, otro };
+    const { plan, sinContenido } = planDeFusion(i, fusion);
+    const nombreDe = (id: string) => (plan?.indice.categorias ?? i.categorias).find((k) => k.id === id)?.nombre ?? "Otros";
+    return {
+      nuevos: (plan?.documentosNuevos ?? []).map((d) => ({ nombre: d.nombre, tam: d.tam, carpeta: nombreDe(d.categoria) })),
+      actualizados: plan?.documentosActualizados.length ?? 0,
+      carpetasNuevas: (plan?.categoriasNuevas ?? []).map((k) => k.nombre),
+      sinContenido,
+    };
+  },
+
+  /**
+   * Segundo paso: sumar. Primero se copian los criptogramas que faltan —tal cual,
+   * sin recifrar: son de la misma caja— y solo después se guarda el índice. Si
+   * algo falla en medio quedan criptogramas sin dueño, que se pueden liberar,
+   * nunca una entrada que apunta a nada. No se pisa ningún criptograma que ya
+   * esté aquí.
+   */
+  combinarAplicar: async () => {
+    const { indice: i } = exigir();
+    const f = fusion;
+    if (!f) throw new Error("Elige primero la copia que quieres combinar.");
+    // Se recalcula ahora: entre elegir la copia y confirmar el índice pudo cambiar.
+    const { plan } = planDeFusion(i, f);
+    if (plan) {
+      const presentes = new Set(await almacen.idsDocs());
+      for (const d of plan.documentosNuevos) {
+        if (presentes.has(d.id)) continue;
+        const registro = f.paquete.documentos.find((r) => r.id === d.id);
+        if (!registro) continue;
+        const cifrado = new Uint8Array(await f.archivo.slice(registro.desde, registro.desde + registro.tam).arrayBuffer());
+        await almacen.guardarDoc(d.id, cifrado);
+      }
+      await guardarIndice(plan.indice);
+    }
+    fusion = null;
+    return biblioteca();
+  },
+
+  combinarCancelar: () => {
+    fusion = null;
     return true;
   },
 

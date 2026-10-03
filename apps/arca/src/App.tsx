@@ -168,6 +168,7 @@ export function App() {
             minutos={minutos}
             alCambiarMinutos={cambiarMinutos}
             alBloquear={(aviso) => void bloquear(aviso)}
+            alCambiarBiblioteca={setBiblioteca}
             alBorrado={() => {
               setBiblioteca(null);
               setExiste(false);
