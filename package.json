@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Cerbero — almacén de contraseñas de conocimiento cero con criptografía híbrida post-cuántica",
+  "description": "Cerbero (contraseñas) y Arca (documentos): dos aplicaciones independientes de conocimiento cero",
   "engines": {
     "node": ">=22"
   },
@@ -14,8 +14,10 @@
     "test:watch": "vitest",
     "typecheck": "tsc --build --force",
     "cerbero": "node --experimental-strip-types apps/cli/src/main.ts",
-    "construir:suelto": "node apps/web/construir-suelto.mjs",
-    "construir:netlify": "node apps/web/construir-suelto.mjs && node apps/web/construir-netlify.mjs"
+    "typecheck:apps": "tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p apps/arca/tsconfig.json && tsc --noEmit -p apps/extension/tsconfig.json",
+    "construir:cerbero": "node scripts/construir-sitio.mjs cerbero",
+    "construir:arca": "node scripts/construir-sitio.mjs arca",
+    "construir:sitio": "node scripts/construir-sitio.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

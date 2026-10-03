@@ -18,6 +18,37 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)
 
+  apps/arca:
+    dependencies:
+      '@cerbero/arca':
+        specifier: workspace:*
+        version: link:../../packages/arca
+      '@cerbero/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
+      '@cerbero/sentinel':
+        specifier: workspace:*
+        version: link:../../packages/sentinel
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.12
+        version: 18.3.31
+      '@types/react-dom':
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.31)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.4
+        version: 4.7.0(vite@6.4.3(@types/node@22.20.1))
+      vite:
+        specifier: ^6.0.7
+        version: 6.4.3(@types/node@22.20.1)
+
   apps/cli:
     dependencies:
       '@cerbero/crypto':

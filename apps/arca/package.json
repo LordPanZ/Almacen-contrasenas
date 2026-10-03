@@ -1,0 +1,25 @@
+{
+  "name": "@cerbero/arca-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Arca: aplicación para guardar documentos cifrados. Todo el cifrado ocurre en el navegador",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:suelto": "node construir-suelto.mjs"
+  },
+  "dependencies": {
+    "@cerbero/arca": "workspace:*",
+    "@cerbero/crypto": "workspace:*",
+    "@cerbero/sentinel": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  }
+}

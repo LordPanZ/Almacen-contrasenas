@@ -1,14 +1,23 @@
-# Despliegue del fichero suelto de Cerbero.
+# Despliegue de Cerbero y de Arca desde el mismo repositorio, como DOS sitios.
 #
-# Lo que se publica es el mismo HTML autocontenido que se descarga a mano:
-# una sola página sin peticiones a la red. Servirlo por HTTPS no cambia la
-# aplicación, pero sí dos cosas prácticas frente a abrirlo desde el disco:
-# IndexedDB funciona —así que la bóveda sobrevive a cerrar la pestaña— y el
-# teléfono puede instalarlo como acceso directo.
+# Cada aplicación se publica como el fichero HTML autocontenido que también se
+# descarga a mano: una sola página sin peticiones a la red. Servirlas por HTTPS
+# no cambia la aplicación, pero sí dos cosas prácticas frente a abrirlas desde el
+# disco: IndexedDB funciona —así que lo guardado sobrevive a cerrar la pestaña— y
+# el teléfono puede añadirlas a la pantalla de inicio.
+#
+# Qué aplicación construye cada sitio lo decide la variable APP_PUBLICAR, que se
+# fija en Netlify (Site configuration → Environment variables), no aquí:
+#
+#   sitio de Cerbero →  sin variable, o  APP_PUBLICAR = cerbero
+#   sitio de Arca    →  APP_PUBLICAR = arca
+#
+# Son dos sitios con dos direcciones, y por tanto dos orígenes: el navegador
+# aísla el almacenamiento de uno del del otro.
 
 [build]
-  command = "pnpm run construir:netlify"
-  publish = "apps/web/dist-netlify"
+  command = "pnpm run construir:sitio"
+  publish = "dist-sitio"
 
 [build.environment]
   NODE_VERSION = "22"

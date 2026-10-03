@@ -8,3 +8,4 @@ coverage/
 .env.*
 *.cerbero
 vault-data/
+dist-sitio/
