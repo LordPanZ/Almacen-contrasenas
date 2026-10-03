@@ -142,6 +142,12 @@ en memoria.
 - **Reversión.** Quien restaure una copia antigua en lugar de la actual pierde lo
   añadido desde entonces, y nada lo detecta: el contador de revisión protege
   contra dos pestañas, no contra una copia vieja.
+- **Los datos viven solo en el navegador**, y el navegador puede borrarlos. Arca
+  pide almacenamiento persistente, pero no es una garantía; en Safari de iPhone,
+  además, el sistema puede borrar los datos de una web que lleva siete días sin
+  abrirse salvo que esté añadida a la pantalla de inicio. Lo único que cuenta como
+  protección contra eso es la copia de seguridad: descárgala cada vez que añadas
+  algo importante y guárdala fuera del móvil.
 - La contraseña pasa por el hilo principal como cadena de JavaScript, que es
   inmutable y no se puede borrar. El núcleo mantiene el secreto en búferes
   borrables; la capa de interfaz no puede.
