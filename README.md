@@ -1,7 +1,19 @@
-# Cerbero
+# Cerbero y Arca
 
-Almacén de contraseñas de conocimiento cero con criptografía híbrida
-post-cuántica. Aplicación web, línea de comandos y librerías auditables.
+Dos aplicaciones **independientes**, de conocimiento cero y con todo el cifrado
+en el navegador:
+
+- **Cerbero** — almacén de contraseñas con criptografía híbrida post-cuántica.
+  Aplicación web, extensión, línea de comandos y librerías auditables.
+- **Arca** — caja cifrada para documentos: DNI, escrituras, PDF y fotos. Su
+  propia contraseña, su propio formato y su propia dirección web.
+  Ver [docs/ARCA.md](docs/ARCA.md).
+
+No comparten datos, claves ni origen: abiertas en direcciones distintas, el
+navegador aísla el almacenamiento de una del de la otra. Solo comparten código,
+nunca información: `@cerbero/crypto` (las primitivas, el único paquete
+autorizado a tocar criptografía) y `@cerbero/sentinel` (el medidor de fuerza de
+contraseñas).
 
 > **Aviso:** no ha pasado una auditoría criptográfica independiente. No lo uses
 > para proteger secretos reales hasta que la tenga.
@@ -27,10 +39,12 @@ secretos en reposo y sincronizarlos. Cerbero ataca los huecos que quedan.
 
 ```bash
 pnpm install
-pnpm test                          # 175 tests
+pnpm test                          # 261 tests
 pnpm build
+pnpm run typecheck:apps            # comprueba los tipos de las apps (la raíz solo ve los paquetes)
 
-pnpm --filter @cerbero/web dev        # la app, en el navegador
+pnpm --filter @cerbero/web dev        # Cerbero, en el navegador
+pnpm --filter @cerbero/arca-web dev   # Arca, en el navegador
 pnpm --filter @cerbero/extension build  # extensión → cargar apps/extension/dist
 node --experimental-strip-types apps/cli/src/main.ts --help
 ```
@@ -65,17 +79,36 @@ packages/vault       Jerarquía de claves, cifrado de ítems, bóvedas de coacci
 packages/ledger      Registro de auditoría Merkle (RFC 6962)
 packages/guardians   Recuperación social, cerradura temporal, hombre muerto
 packages/sentinel    Credenciales trampa y filtraciones con conocimiento cero
-apps/cli             Línea de comandos
-apps/web             Interfaz gráfica, entera en el navegador
-apps/extension       Extensión de navegador con relleno vinculado al origen
+packages/arca        Caja de documentos: claves, cifrado por trozos, copia de seguridad
+apps/cli             Cerbero: línea de comandos
+apps/web             Cerbero: interfaz gráfica, entera en el navegador
+apps/extension       Cerbero: extensión con relleno vinculado al origen
+apps/arca            Arca: interfaz gráfica de la caja de documentos
+scripts/             Empaquetador de un solo fichero y selector de sitio
 ```
 
 Las dependencias van en un solo sentido: todos apuntan a `crypto` y ninguno se
-apunta entre sí. Solo las apps los componen.
+apunta entre sí. Solo las apps los componen. `arca` no depende de `vault`, ni
+al revés: son productos distintos.
+
+## Publicar
+
+Cada aplicación se publica como **su propio sitio de Netlify**, desde este mismo
+repositorio. Qué construye cada sitio lo decide la variable `APP_PUBLICAR`:
+
+| Sitio | Variable (Netlify → Site configuration → Environment variables) |
+| --- | --- |
+| Cerbero | ninguna, o `APP_PUBLICAR = cerbero` |
+| Arca | `APP_PUBLICAR = arca` |
+
+La rama a desplegar y el resto (`pnpm run construir:sitio`, carpeta `dist-sitio`)
+ya vienen en `netlify.toml`. En local: `pnpm run construir:cerbero` o
+`pnpm run construir:arca` dejan en `dist-sitio/` lo que se publicaría.
 
 ## Documentación
 
-- [Arquitectura](docs/ARQUITECTURA.md) — jerarquía de claves y formato de fichero
+- [Arquitectura](docs/ARQUITECTURA.md) — jerarquía de claves y formato de fichero de Cerbero
+- [Arca](docs/ARCA.md) — la caja de documentos: claves, formato, copia y límites
 - [Modelo de amenazas](docs/MODELO-AMENAZAS.md) — siete adversarios, y lo que **no** cubre
 - [API del núcleo](docs/API-NUCLEO-CRIPTO.md) — referencia de `@cerbero/crypto`
 

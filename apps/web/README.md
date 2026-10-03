@@ -1,5 +1,8 @@
 # Interfaz de Cerbero
 
+Gestor de **contraseñas**. Los documentos (PDF, fotos, DNI) no viven aquí: los
+guarda Arca, una aplicación independiente (`apps/arca`).
+
 Aplicación web que corre **entera en el navegador**. No hay servidor: se sirve
 como ficheros estáticos, así que no existe ninguna máquina que pudiera ver tus
 secretos aunque quisiera.
@@ -13,7 +16,7 @@ pnpm --filter @cerbero/web build:suelto   # UN solo fichero: cerbero.html
 ## El fichero suelto
 
 `build:suelto` produce `cerbero.html`: la aplicación entera —código, estilos,
-trabajador criptográfico y tipografías— en un único fichero de unos 1,7 MiB que
+trabajador criptográfico y tipografías— en un único fichero de unos 1,8 MiB que
 se abre con doble clic, cabe en una memoria USB y **no hace ni una sola petición
 a la red**. La compilación falla a propósito si queda alguna referencia externa,
 para que nadie entregue como suelto algo que no lo es.
